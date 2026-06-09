@@ -37,28 +37,32 @@ func (i *Importer) Add(ctx context.Context, file string, book *hardcover.Book) e
 
 	var coverPath string
 	if book != nil {
-		if title := strings.TrimSpace(book.Title); title != "" {
-			args = append(args, "--title", title)
-		}
-		if len(book.Authors) > 0 {
-			args = append(args, "--authors", strings.Join(book.Authors, " & "))
-		}
-		if isbn := firstNonEmpty(book.ISBN13, book.ISBN10); isbn != "" {
-			args = append(args, "--isbn", isbn)
-		}
-		if book.HardcoverID != "" {
-			args = append(args, "--identifier", fmt.Sprintf("hardcover:%d", book.HardcoverID))
-		}
-		if book.Series != "" {
-			args = append(args, "--series", book.Series)
-			if idx := book.SeriesIndexString(); idx != "" {
-				args = append(args, "--series-index", idx)
+		if id, ok := i.getExistingID(ctx, book); ok {
+			args = []string{"add_format", "--dont-replace", id}
+		} else {
+			if title := strings.TrimSpace(book.Title); title != "" {
+				args = append(args, "--title", title)
 			}
-		}
-		if book.CoverURL != "" {
-			if p, err := downloadCover(ctx, book.CoverURL); err == nil {
-				coverPath = p
-				args = append(args, "--cover", p)
+			if len(book.Authors) > 0 {
+				args = append(args, "--authors", strings.Join(book.Authors, " & "))
+			}
+			if isbn := firstNonEmpty(book.ISBN13, book.ISBN10); isbn != "" {
+				args = append(args, "--isbn", isbn)
+			}
+			if book.HardcoverID != "" {
+				args = append(args, "--identifier", fmt.Sprintf("hardcover:%s", book.HardcoverID))
+			}
+			if book.Series != "" {
+				args = append(args, "--series", book.Series)
+				if idx := book.SeriesIndexString(); idx != "" {
+					args = append(args, "--series-index", idx)
+				}
+			}
+			if book.CoverURL != "" {
+				if p, err := downloadCover(ctx, book.CoverURL); err == nil {
+					coverPath = p
+					args = append(args, "--cover", p)
+				}
 			}
 		}
 	}
@@ -70,6 +74,7 @@ func (i *Importer) Add(ctx context.Context, file string, book *hardcover.Book) e
 
 	if i.DryRun {
 		fmt.Printf("[dry-run] %s %s\n", i.Bin, strings.Join(quoteArgs(args), " "))
+		os.Exit(1)
 		return nil
 	}
 
@@ -79,6 +84,15 @@ func (i *Importer) Add(ctx context.Context, file string, book *hardcover.Book) e
 		return fmt.Errorf("calibredb add failed: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+func (i *Importer) getExistingID(ctx context.Context, b *hardcover.Book) (string, bool) {
+	cmd := exec.CommandContext(ctx, i.Bin, "search", "title:"+b.Title)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", false
+	}
+	return string(out), true
 }
 
 func downloadCover(ctx context.Context, url string) (string, error) {
