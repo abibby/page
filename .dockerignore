@@ -1,0 +1,9 @@
+.git
+.claude
+.env
+state.json
+state.json.tmp
+page
+page.exe
+*_test.go
+README.md
