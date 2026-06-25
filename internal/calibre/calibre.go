@@ -5,14 +5,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
-	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/abibby/page/internal/bookmeta"
 	"github.com/abibby/page/internal/hardcover"
+	"github.com/abibby/salusa/extra/sets"
 )
 
 // Importer adds files to a Calibre library using the calibredb CLI.
@@ -22,11 +25,20 @@ type Importer struct {
 	Tag           string // tag applied to every imported book
 	AddDuplicates bool   // pass --duplicates to force-add
 	DryRun        bool   // log the command instead of running it
+
+	idCache map[string]*Book
 }
 
 // Add imports file into the Calibre library, applying metadata from book (which
 // may be nil if no Hardcover match was found).
-func (i *Importer) Add(ctx context.Context, file string, book *hardcover.Book) error {
+func (i *Importer) Add(ctx context.Context, file string, meta *bookmeta.Meta, book *hardcover.Book) error {
+	if meta.IsAudiobook {
+		return i.addAudiobook(ctx, file, book)
+	}
+	return i.addEbook(ctx, file, book)
+}
+
+func (i *Importer) addEbook(ctx context.Context, file string, book *hardcover.Book) error {
 	args := []string{"add", "--with-library", i.Library}
 	if i.AddDuplicates {
 		args = append(args, "--duplicates")
@@ -37,8 +49,8 @@ func (i *Importer) Add(ctx context.Context, file string, book *hardcover.Book) e
 
 	var coverPath string
 	if book != nil {
-		if id, ok := i.getExistingID(ctx, book); ok {
-			args = []string{"add_format", "--dont-replace", id}
+		if existingBook, ok := i.getExistingID(ctx, book); ok {
+			args = []string{"add_format", "--dont-replace", fmt.Sprint(existingBook.ID)}
 		} else {
 			if title := strings.TrimSpace(book.Title); title != "" {
 				args = append(args, "--title", title)
@@ -50,7 +62,7 @@ func (i *Importer) Add(ctx context.Context, file string, book *hardcover.Book) e
 				args = append(args, "--isbn", isbn)
 			}
 			if book.HardcoverID != "" {
-				args = append(args, "--identifier", fmt.Sprintf("hardcover:%s", book.HardcoverID))
+				args = append(args, "--identifier", fmt.Sprintf("hardcover-id:%v", book.HardcoverID))
 			}
 			if book.Series != "" {
 				args = append(args, "--series", book.Series)
@@ -74,25 +86,81 @@ func (i *Importer) Add(ctx context.Context, file string, book *hardcover.Book) e
 
 	if i.DryRun {
 		fmt.Printf("[dry-run] %s %s\n", i.Bin, strings.Join(quoteArgs(args), " "))
-		os.Exit(1)
 		return nil
 	}
 
-	cmd := exec.CommandContext(ctx, i.Bin, args...)
-	out, err := cmd.CombinedOutput()
+	out, err := i.exec(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("calibredb add failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+func (i *Importer) addAudiobook(ctx context.Context, file string, book *hardcover.Book) error {
+	if book == nil {
+		return fmt.Errorf("calibre.Importer.Add: hardcover book must not be null")
+	}
+
+	existingBook, ok := i.getExistingID(ctx, book)
+	if !ok {
+		f, err := os.CreateTemp("", "book-*.placeholder")
+		if err != nil {
+			return fmt.Errorf("calibredb add failed: %w", err)
+		}
+		f.Close()
+
+		err = i.addEbook(ctx, f.Name(), book)
+		if err != nil {
+			return err
+		}
+		existingBook, ok = i.getExistingID(ctx, book)
+		if !ok {
+			return fmt.Errorf("calibredb add failed: could not find created book")
+		}
+	}
+
+	newFile := path.Join(path.Dir(existingBook.Formats[0]), path.Base(file))
+
+	if i.DryRun {
+		fmt.Printf("[dry-run] ln '%s' '%s'\n", file, newFile)
+		return nil
+	}
+
+	err := os.Link(file, newFile)
+	if err != nil {
+		return fmt.Errorf("calibredb add failed: %w", err)
 	}
 	return nil
 }
 
-func (i *Importer) getExistingID(ctx context.Context, b *hardcover.Book) (string, bool) {
-	cmd := exec.CommandContext(ctx, i.Bin, "search", "title:"+b.Title)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", false
+func (i *Importer) getExistingID(ctx context.Context, b *hardcover.Book) (*Book, bool) {
+	if i.idCache == nil {
+		i.idCache = map[string]*Book{}
 	}
-	return string(out), true
+	id, ok := i.idCache[b.Title]
+	if ok {
+		return id, true
+	}
+	books, err := i.list(ctx, "title:"+b.Title)
+	if err != nil {
+		return nil, false
+	}
+
+	for _, cb := range books {
+		calibreAuthors := sets.NewMapSet(strings.Split(cb.Authors, " & ")...)
+		authors := sets.NewMapSet(b.Authors...)
+		if cb.Title == b.Title && maps.Equal(calibreAuthors, authors) {
+			i.idCache[b.Title] = &cb
+			return &cb, true
+		}
+	}
+
+	return nil, false
+}
+
+func (i *Importer) ClearCache() {
+	i.idCache = map[string]*Book{}
 }
 
 func downloadCover(ctx context.Context, url string) (string, error) {

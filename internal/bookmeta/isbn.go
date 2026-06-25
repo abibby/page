@@ -9,9 +9,10 @@ import (
 
 // Meta is the metadata recovered from a book file. Any field may be empty.
 type Meta struct {
-	ISBN   string // normalised, digits only (ISBN-13 preferred)
-	Title  string
-	Author string
+	ISBN        string // normalised, digits only (ISBN-13 preferred)
+	Title       string
+	Author      string
+	IsAudiobook bool
 }
 
 var (

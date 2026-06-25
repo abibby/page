@@ -22,7 +22,7 @@ type Client struct {
 
 // Book is the normalised metadata returned to callers.
 type Book struct {
-	HardcoverID string
+	HardcoverID any
 	Title       string
 	Authors     []string
 	Series      string
@@ -59,7 +59,7 @@ type gqlError struct {
 
 // edition/book shapes matching the queried fields.
 type apiBook struct {
-	ID            string `json:"id"`
+	ID            any    `json:"id"`
 	Title         string `json:"title"`
 	ReleaseYear   int    `json:"release_year"`
 	Contributions []struct {
@@ -106,6 +106,7 @@ func (c *Client) LookupByISBN(ctx context.Context, isbn string) (*Book, error) {
     book {` + bookFields + `}
   }
 }`
+
 	var resp struct {
 		Editions []apiEdition `json:"editions"`
 	}

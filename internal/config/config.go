@@ -19,9 +19,12 @@ type Config struct {
 	QbitUsername string
 	QbitPassword string
 	QbitTag      string
+	QbitDoneTag  string
+	QbitErrorTag string
 
 	// Calibre.
 	CalibreLibrary string
+	CalibreServer  string
 	CalibredbBin   string
 	AddDuplicates  bool
 
@@ -56,7 +59,10 @@ func Load(envFile string) (*Config, error) {
 		QbitUsername:   os.Getenv("QBIT_USERNAME"),
 		QbitPassword:   os.Getenv("QBIT_PASSWORD"),
 		QbitTag:        getEnv("QBIT_TAG", "book"),
+		QbitDoneTag:    getEnv("QBIT_DONE_TAG", "done"),
+		QbitErrorTag:   getEnv("QBIT_ERROR_TAG", "error"),
 		CalibreLibrary: os.Getenv("CALIBRE_LIBRARY"),
+		CalibreServer:  os.Getenv("CALIBRE_SERVER"),
 		CalibredbBin:   getEnv("CALIBREDB_BIN", "calibredb"),
 		AddDuplicates:  getBool("ADD_DUPLICATES", false),
 		HardcoverURL:   getEnv("HARDCOVER_URL", "https://api.hardcover.app/v1/graphql"),

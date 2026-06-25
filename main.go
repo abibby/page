@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,7 +20,6 @@ import (
 	"github.com/abibby/page/internal/config"
 	"github.com/abibby/page/internal/hardcover"
 	"github.com/abibby/page/internal/qbittorrent"
-	"github.com/abibby/page/internal/state"
 )
 
 func main() {
@@ -31,11 +32,6 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	store, err := state.Load(cfg.StateFile)
-	if err != nil {
-		log.Fatalf("state: %v", err)
-	}
-
 	hc := hardcover.New(cfg.HardcoverURL, cfg.HardcoverToken)
 	importer := &calibre.Importer{
 		Bin:           cfg.CalibredbBin,
@@ -45,7 +41,7 @@ func main() {
 		DryRun:        cfg.DryRun,
 	}
 
-	app := &app{cfg: cfg, store: store, hc: hc, importer: importer}
+	app := &app{cfg: cfg, hc: hc, importer: importer}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -79,7 +75,6 @@ func main() {
 
 type app struct {
 	cfg      *config.Config
-	store    *state.Store
 	hc       *hardcover.Client
 	importer *calibre.Importer
 }
@@ -87,6 +82,8 @@ type app struct {
 // runPass logs in afresh (the SID may have expired between polls), lists
 // completed tagged torrents, and imports any not yet processed.
 func (a *app) runPass(ctx context.Context) error {
+	defer a.importer.ClearCache()
+
 	qb, err := qbittorrent.New(a.cfg.QbitURL, a.cfg.QbitUsername, a.cfg.QbitPassword)
 	if err != nil {
 		return err
@@ -98,7 +95,8 @@ func (a *app) runPass(ctx context.Context) error {
 	}
 
 	for _, t := range torrents {
-		if a.store.Has(t.Hash) {
+		tags := strings.Split(t.Tags, ", ")
+		if slices.Contains(tags, a.cfg.QbitDoneTag) {
 			continue
 		}
 		// The "completed" filter can include still-moving torrents; require 100%.
@@ -109,7 +107,7 @@ func (a *app) runPass(ctx context.Context) error {
 			log.Printf("torrent %q: %v", t.Name, err)
 			continue // leave unmarked so we retry next pass
 		}
-		if err := a.store.Mark(t.Hash, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		if err := qb.AddTag(&t, a.cfg.QbitDoneTag); err != nil {
 			log.Printf("state mark %q: %v", t.Name, err)
 		}
 	}
@@ -123,6 +121,7 @@ func (a *app) processTorrent(ctx context.Context, qb *qbittorrent.Client, t qbit
 	}
 
 	imported := 0
+	hasError := false
 	for _, f := range files {
 		if !bookmeta.Supported(f.Name) || f.Progress < 1.0 {
 			continue
@@ -130,10 +129,12 @@ func (a *app) processTorrent(ctx context.Context, qb *qbittorrent.Client, t qbit
 		hostPath := a.cfg.RemapPath(t.AbsPath(f))
 		if _, err := os.Stat(hostPath); err != nil {
 			log.Printf("  skip %s: not readable on host (%v)", filepath.Base(hostPath), err)
+			hasError = true
 			continue
 		}
 		if err := a.importFile(ctx, hostPath); err != nil {
 			log.Printf("  %s: %v", filepath.Base(hostPath), err)
+			hasError = true
 			continue
 		}
 		imported++
@@ -141,6 +142,12 @@ func (a *app) processTorrent(ctx context.Context, qb *qbittorrent.Client, t qbit
 
 	if imported == 0 {
 		log.Printf("torrent %q: no book files imported", t.Name)
+	}
+
+	if hasError {
+		if err := qb.AddTag(&t, a.cfg.QbitErrorTag); err != nil {
+			log.Printf("state mark %q: %v", t.Name, err)
+		}
 	}
 	return nil
 }
@@ -161,7 +168,7 @@ func (a *app) importFile(ctx context.Context, path string) error {
 		label = filepath.Base(path)
 	}
 
-	if err := a.importer.Add(ctx, path, book); err != nil {
+	if err := a.importer.Add(ctx, path, &meta, book); err != nil {
 		return err
 	}
 	log.Printf("  imported %q (isbn=%s)", label, meta.ISBN)

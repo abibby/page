@@ -9,7 +9,7 @@ import (
 // Supported reports whether a file extension is one this package can read.
 func Supported(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".epub", ".m4b", ".m4a":
+	case ".epub", ".m4b", ".m4a", ".mp3":
 		return true
 	default:
 		return false
@@ -21,8 +21,8 @@ func Extract(path string) (Meta, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".epub":
 		return extractEPUB(path)
-	case ".m4b", ".m4a":
-		return extractMP4(path)
+	case ".m4b", ".m4a", ".mp3":
+		return extractMP3(path)
 	default:
 		return Meta{}, fmt.Errorf("unsupported file type: %s", path)
 	}

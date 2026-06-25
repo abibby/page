@@ -97,6 +97,18 @@ func (c *Client) TorrentsByTag(tag, filter string) ([]Torrent, error) {
 	return torrents, nil
 }
 
+func (c *Client) AddTag(torrent *Torrent, tags ...string) error {
+	q := url.Values{
+		"hashes": {torrent.Hash},
+		"tags":   {strings.Join(tags, ",")},
+	}
+
+	if err := c.postJSON("/api/v2/torrents/addTags", q, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Files returns the file list for a torrent.
 func (c *Client) Files(hash string) ([]File, error) {
 	q := url.Values{"hash": {hash}}
@@ -108,11 +120,21 @@ func (c *Client) Files(hash string) ([]File, error) {
 }
 
 func (c *Client) getJSON(p string, out any) error {
-	req, err := http.NewRequest(http.MethodGet, c.base+p, nil)
+	return c.request(http.MethodGet, p, nil, out)
+}
+func (c *Client) postJSON(p string, q url.Values, out any) error {
+	return c.request(http.MethodPost, p, strings.NewReader(q.Encode()), out)
+}
+
+func (c *Client) request(method, p string, body io.Reader, out any) error {
+	req, err := http.NewRequest(method, c.base+p, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Referer", c.base)
+	if body != nil && body != http.NoBody {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -121,6 +143,9 @@ func (c *Client) getJSON(p string, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("GET %s: status %d: %s", p, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	if out == nil {
+		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }

@@ -44,8 +44,9 @@ func extractEPUB(path string) (Meta, error) {
 	}
 
 	meta := Meta{
-		Title:  strings.TrimSpace(pkg.Title),
-		Author: strings.TrimSpace(strings.Join(pkg.Creators, " & ")),
+		Title:       strings.TrimSpace(pkg.Title),
+		Author:      strings.TrimSpace(strings.Join(pkg.Creators, " & ")),
+		IsAudiobook: false,
 	}
 
 	// Prefer an identifier explicitly scheme-tagged as ISBN, then fall back to
