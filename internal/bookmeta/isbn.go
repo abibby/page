@@ -15,6 +15,10 @@ type Meta struct {
 	IsAudiobook bool
 }
 
+func (m *Meta) CacheID() string {
+	return m.Author + "|" + m.Title
+}
+
 var (
 	isbn13Re = regexp.MustCompile(`97[89][0-9]{10}`)
 	isbn10Re = regexp.MustCompile(`\b[0-9]{9}[0-9Xx]\b`)

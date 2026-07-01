@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -22,9 +23,12 @@ import (
 	"github.com/abibby/page/internal/qbittorrent"
 )
 
+var ErrNoBook = errors.New("no book")
+
 func main() {
 	envFile := flag.String("env", ".env", "path to the .env file")
 	once := flag.Bool("once", false, "run a single pass and exit instead of looping")
+	test := flag.Bool("test", false, "run the test suit")
 	flag.Parse()
 
 	cfg, err := config.Load(*envFile)
@@ -41,7 +45,18 @@ func main() {
 		DryRun:        cfg.DryRun,
 	}
 
-	app := &app{cfg: cfg, hc: hc, importer: importer}
+	app := &app{
+		cfg:      cfg,
+		hc:       hc,
+		importer: importer,
+		hcCache:  map[string]*hardcover.Book{},
+	}
+
+	if *test {
+		ctx := context.Background()
+		runTests(ctx, app)
+		return
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -77,12 +92,14 @@ type app struct {
 	cfg      *config.Config
 	hc       *hardcover.Client
 	importer *calibre.Importer
+
+	hcCache map[string]*hardcover.Book
 }
 
 // runPass logs in afresh (the SID may have expired between polls), lists
 // completed tagged torrents, and imports any not yet processed.
 func (a *app) runPass(ctx context.Context) error {
-	defer a.importer.ClearCache()
+	defer a.clearCache()
 
 	qb, err := qbittorrent.New(a.cfg.QbitURL, a.cfg.QbitUsername, a.cfg.QbitPassword)
 	if err != nil {
@@ -152,13 +169,25 @@ func (a *app) processTorrent(ctx context.Context, qb *qbittorrent.Client, t qbit
 	return nil
 }
 
-func (a *app) importFile(ctx context.Context, path string) error {
+func (a *app) findBook(ctx context.Context, path string) (*hardcover.Book, *bookmeta.Meta, error) {
 	meta, err := bookmeta.Extract(path)
 	if err != nil {
-		log.Printf("  %s: metadata extract failed (%v); importing without enrichment", filepath.Base(path), err)
+		return nil, nil, err
 	}
 
-	book := a.lookup(ctx, meta)
+	b, ok := a.lookup(ctx, meta)
+	if !ok {
+		return nil, nil, ErrNoBook
+	}
+	return b, &meta, nil
+}
+
+func (a *app) importFile(ctx context.Context, path string) error {
+	book, meta, err := a.findBook(ctx, path)
+	if err != nil {
+		log.Printf("  %s: metadata extract failed (%v); importing without enrichment", filepath.Base(path), err)
+		return nil
+	}
 
 	label := meta.Title
 	if book != nil && book.Title != "" {
@@ -168,7 +197,7 @@ func (a *app) importFile(ctx context.Context, path string) error {
 		label = filepath.Base(path)
 	}
 
-	if err := a.importer.Add(ctx, path, &meta, book); err != nil {
+	if err := a.importer.Add(ctx, path, meta, book); err != nil {
 		return err
 	}
 	log.Printf("  imported %q (isbn=%s)", label, meta.ISBN)
@@ -178,13 +207,18 @@ func (a *app) importFile(ctx context.Context, path string) error {
 // lookup enriches metadata via Hardcover: by ISBN first, then a title/author
 // search fallback. Falls back to the file's own metadata if Hardcover has no
 // match, or nil if nothing is known.
-func (a *app) lookup(ctx context.Context, meta bookmeta.Meta) *hardcover.Book {
+func (a *app) lookup(ctx context.Context, meta bookmeta.Meta) (*hardcover.Book, bool) {
+	b, ok := a.hcCache[meta.CacheID()]
+	if ok {
+		return b, true
+	}
 	if meta.ISBN != "" {
 		book, err := a.hc.LookupByISBN(ctx, meta.ISBN)
 		if err != nil {
 			log.Printf("  hardcover isbn lookup: %v", err)
 		} else if book != nil {
-			return book
+			a.hcCache[meta.CacheID()] = book
+			return book, true
 		}
 	}
 	if meta.Title != "" {
@@ -192,15 +226,21 @@ func (a *app) lookup(ctx context.Context, meta bookmeta.Meta) *hardcover.Book {
 		if err != nil {
 			log.Printf("  hardcover search: %v", err)
 		} else if book != nil {
-			return book
+			a.hcCache[meta.CacheID()] = book
+			return book, true
 		}
 	}
-	if meta.Title != "" || meta.Author != "" {
-		b := &hardcover.Book{Title: meta.Title, ISBN13: meta.ISBN}
-		if meta.Author != "" {
-			b.Authors = []string{meta.Author}
-		}
-		return b
-	}
-	return nil
+	// if meta.Title != "" || meta.Author != "" {
+	// 	b := &hardcover.Book{Title: meta.Title, ISBN13: meta.ISBN}
+	// 	if meta.Author != "" {
+	// 		b.Authors = []string{meta.Author}
+	// 	}
+	// 	return b, true
+	// }
+	return nil, false
+}
+func (a *app) clearCache() {
+	a.hcCache = map[string]*hardcover.Book{}
+
+	a.importer.ClearCache()
 }

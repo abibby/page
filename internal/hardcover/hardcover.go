@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,16 +14,19 @@ import (
 	"time"
 )
 
+var ErrNotFound = errors.New("not found")
+
 // Client queries the Hardcover GraphQL API.
 type Client struct {
 	endpoint string
 	token    string
 	http     *http.Client
+	throttle <-chan time.Time
 }
 
 // Book is the normalised metadata returned to callers.
 type Book struct {
-	HardcoverID any
+	HardcoverID int
 	Title       string
 	Authors     []string
 	Series      string
@@ -44,6 +48,7 @@ func New(endpoint, token string) *Client {
 		endpoint: endpoint,
 		token:    token,
 		http:     &http.Client{Timeout: 30 * time.Second},
+		throttle: time.Tick(time.Second),
 	}
 }
 
@@ -76,7 +81,8 @@ type apiBook struct {
 	Image struct {
 		URL string `json:"url"`
 	} `json:"image"`
-	ISBNs []string `json:"isbns"`
+	ISBNs     []string `json:"isbns"`
+	UserCount int      `json:"users_count"`
 }
 
 type apiEdition struct {
@@ -86,15 +92,6 @@ type apiEdition struct {
 	Book   apiBook `json:"book"`
 }
 
-const bookFields = `
-  id
-  title
-  release_year
-  contributions { author { name } }
-  book_series { position series { name } }
-  image { url }
-`
-
 // LookupByISBN finds the edition matching an ISBN-13 or ISBN-10 and returns its
 // parent book's metadata. Returns (nil, nil) when no edition matches.
 func (c *Client) LookupByISBN(ctx context.Context, isbn string) (*Book, error) {
@@ -103,7 +100,14 @@ func (c *Client) LookupByISBN(ctx context.Context, isbn string) (*Book, error) {
     title
     isbn_13
     isbn_10
-    book {` + bookFields + `}
+    book {	
+		id
+		title
+		release_year
+		contributions { author { name } }
+		book_series { position series { name } }
+		image { url }
+  	}
   }
 }`
 
@@ -114,7 +118,7 @@ func (c *Client) LookupByISBN(ctx context.Context, isbn string) (*Book, error) {
 		return nil, err
 	}
 	if len(resp.Editions) == 0 {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	ed := resp.Editions[0]
 	book := bookFromAPI(ed.Book)
@@ -147,16 +151,19 @@ func (c *Client) SearchByTitleAuthor(ctx context.Context, title, author string) 
 			} `json:"results"`
 		} `json:"search"`
 	}
-	if err := c.do(ctx, query, map[string]any{"title": title}, &resp); err != nil {
+	if err := c.do(ctx, query, map[string]any{"title": strings.ReplaceAll(title, "(Unabridged)", "")}, &resp); err != nil {
 		return nil, err
 	}
 	if len(resp.Search.Results.Hits) == 0 {
 		return nil, nil
 	}
 
-	if author = strings.ToLower(strings.TrimSpace(author)); author != "" {
-		for _, h := range resp.Search.Results.Hits {
-			b := h.Document
+	for _, h := range resp.Search.Results.Hits {
+		if h.Document.UserCount < 100 {
+			continue
+		}
+		b := h.Document
+		if author = strings.ToLower(strings.TrimSpace(author)); author != "" {
 			for _, contrib := range b.Contributions {
 				if len(b.ISBNs) == 0 {
 					continue
@@ -167,15 +174,29 @@ func (c *Client) SearchByTitleAuthor(ctx context.Context, title, author string) 
 					return &book, nil
 				}
 			}
+		} else {
+			book := bookFromAPI(b)
+			return &book, nil
 		}
 	}
-	book := bookFromAPI(resp.Search.Results.Hits[0].Document)
-	return &book, nil
+	// book := bookFromAPI(resp.Search.Results.Hits[0].Document)
+	return nil, ErrNotFound
 }
 
 func bookFromAPI(b apiBook) Book {
+	var hcID int
+
+	switch id := b.ID.(type) {
+	case string:
+		i, err := strconv.Atoi(id)
+		if err == nil {
+			hcID = i
+		}
+	case float64:
+		hcID = int(id)
+	}
 	out := Book{
-		HardcoverID: b.ID,
+		HardcoverID: hcID,
 		Title:       b.Title,
 		ReleaseYear: b.ReleaseYear,
 		CoverURL:    b.Image.URL,
@@ -193,6 +214,7 @@ func bookFromAPI(b apiBook) Book {
 }
 
 func (c *Client) do(ctx context.Context, query string, vars map[string]any, out any) error {
+	<-c.throttle
 	body, err := json.Marshal(gqlRequest{Query: query, Variables: vars})
 	if err != nil {
 		return err

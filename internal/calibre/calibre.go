@@ -61,7 +61,7 @@ func (i *Importer) addEbook(ctx context.Context, file string, book *hardcover.Bo
 			if isbn := firstNonEmpty(book.ISBN13, book.ISBN10); isbn != "" {
 				args = append(args, "--isbn", isbn)
 			}
-			if book.HardcoverID != "" {
+			if book.HardcoverID != 0 {
 				args = append(args, "--identifier", fmt.Sprintf("hardcover-id:%v", book.HardcoverID))
 			}
 			if book.Series != "" {

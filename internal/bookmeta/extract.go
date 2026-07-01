@@ -22,7 +22,7 @@ func Extract(path string) (Meta, error) {
 	case ".epub":
 		return extractEPUB(path)
 	case ".m4b", ".m4a", ".mp3":
-		return extractMP3(path)
+		return extractAudio(path)
 	default:
 		return Meta{}, fmt.Errorf("unsupported file type: %s", path)
 	}
