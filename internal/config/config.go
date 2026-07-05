@@ -37,6 +37,8 @@ type Config struct {
 	StateFile    string
 	DryRun       bool
 
+	GeminiAPIKey string
+
 	// pathMaps remap container paths (as reported by qBittorrent running in
 	// Docker) to paths reachable from this host. Sorted longest-prefix first.
 	pathMaps []pathMap
@@ -67,6 +69,7 @@ func Load(envFile string) (*Config, error) {
 		AddDuplicates:  getBool("ADD_DUPLICATES", false),
 		HardcoverURL:   getEnv("HARDCOVER_URL", "https://api.hardcover.app/v1/graphql"),
 		HardcoverToken: os.Getenv("HARDCOVER_TOKEN"),
+		GeminiAPIKey:   os.Getenv("GEMINI_API_KEY"),
 		StateFile:      getEnv("STATE_FILE", "state.json"),
 		DryRun:         getBool("DRY_RUN", false),
 	}

@@ -9,10 +9,10 @@ import (
 
 // Meta is the metadata recovered from a book file. Any field may be empty.
 type Meta struct {
-	ISBN        string // normalised, digits only (ISBN-13 preferred)
-	Title       string
-	Author      string
-	IsAudiobook bool
+	ISBN        string `json:"-"` // normalised, digits only (ISBN-13 preferred)
+	Title       string `json:"title"`
+	Author      string `json:"author"`
+	IsAudiobook bool   `json:"-"`
 }
 
 func (m *Meta) CacheID() string {

@@ -9,11 +9,9 @@ import (
 	"flag"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/abibby/page/internal/bookmeta"
@@ -28,7 +26,6 @@ var ErrNoBook = errors.New("no book")
 func main() {
 	envFile := flag.String("env", ".env", "path to the .env file")
 	once := flag.Bool("once", false, "run a single pass and exit instead of looping")
-	test := flag.Bool("test", false, "run the test suit")
 	flag.Parse()
 
 	cfg, err := config.Load(*envFile)
@@ -52,14 +49,7 @@ func main() {
 		hcCache:  map[string]*hardcover.Book{},
 	}
 
-	if *test {
-		ctx := context.Background()
-		runTests(ctx, app)
-		return
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	ctx := context.Background()
 
 	if *once {
 		if err := app.runPass(ctx); err != nil {

@@ -72,12 +72,12 @@ type apiBook struct {
 			Name string `json:"name"`
 		} `json:"author"`
 	} `json:"contributions"`
-	BookSeries []struct {
+	BookSeries *struct {
 		Position float64 `json:"position"`
 		Series   struct {
 			Name string `json:"name"`
 		} `json:"series"`
-	} `json:"book_series"`
+	} `json:"featured_series"`
 	Image struct {
 		URL string `json:"url"`
 	} `json:"image"`
@@ -100,12 +100,15 @@ func (c *Client) LookupByISBN(ctx context.Context, isbn string) (*Book, error) {
     title
     isbn_13
     isbn_10
-    book {	
+    book {
 		id
 		title
 		release_year
 		contributions { author { name } }
-		book_series { position series { name } }
+		book_series {
+			position
+			series { name }
+		}
 		image { url }
   	}
   }
@@ -137,25 +140,24 @@ func (c *Client) SearchByTitleAuthor(ctx context.Context, title, author string) 
 	if strings.TrimSpace(title) == "" {
 		return nil, nil
 	}
-	query := `query ($title: String!) {
-  search(query: $title) {
+	query := `query ($query: String!) {
+  search(query: $query) {
     results
   }
 }`
+	type hit struct {
+		Document apiBook `json:"document"`
+	}
 	var resp struct {
 		Search struct {
 			Results struct {
-				Hits []struct {
-					Document apiBook `json:"document"`
-				} `json:"hits"`
+				Hits []hit `json:"hits"`
 			} `json:"results"`
 		} `json:"search"`
 	}
-	if err := c.do(ctx, query, map[string]any{"title": strings.ReplaceAll(title, "(Unabridged)", "")}, &resp); err != nil {
+
+	if err := c.do(ctx, query, map[string]any{"query": title}, &resp); err != nil {
 		return nil, err
-	}
-	if len(resp.Search.Results.Hits) == 0 {
-		return nil, nil
 	}
 
 	for _, h := range resp.Search.Results.Hits {
@@ -206,9 +208,9 @@ func bookFromAPI(b apiBook) Book {
 			out.Authors = append(out.Authors, name)
 		}
 	}
-	if len(b.BookSeries) > 0 {
-		out.Series = b.BookSeries[0].Series.Name
-		out.SeriesIndex = b.BookSeries[0].Position
+	if b.BookSeries != nil {
+		out.Series = b.BookSeries.Series.Name
+		out.SeriesIndex = b.BookSeries.Position
 	}
 	return out
 }

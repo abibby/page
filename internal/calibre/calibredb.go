@@ -9,10 +9,11 @@ import (
 )
 
 type Book struct {
-	ID      int      `json:"id"`
-	Title   string   `json:"title"`
-	Authors string   `json:"authors"`
-	Formats []string `json:"formats"`
+	ID          int               `json:"id"`
+	Title       string            `json:"title"`
+	Authors     string            `json:"authors"`
+	Formats     []string          `json:"formats"`
+	Identifiers map[string]string `json:"identifiers"`
 }
 
 func (i *Importer) list(ctx context.Context, q string) ([]Book, error) {
@@ -20,7 +21,7 @@ func (i *Importer) list(ctx context.Context, q string) ([]Book, error) {
 		q,
 		"--with-library", i.Library,
 		"--for-machine",
-		"--fields", "title,authors,isbn,formats",
+		"--fields", "title,authors,isbn,formats,identifiers",
 		"--search", q,
 	)
 	if err != nil {

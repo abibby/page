@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"os"
 	"path"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/abibby/page/internal/bookmeta"
 	"github.com/abibby/page/internal/hardcover"
-	"github.com/abibby/salusa/extra/sets"
 )
 
 // Importer adds files to a Calibre library using the calibredb CLI.
@@ -26,7 +24,7 @@ type Importer struct {
 	AddDuplicates bool   // pass --duplicates to force-add
 	DryRun        bool   // log the command instead of running it
 
-	idCache map[string]*Book
+	idCache map[int]*Book
 }
 
 // Add imports file into the Calibre library, applying metadata from book (which
@@ -62,7 +60,7 @@ func (i *Importer) addEbook(ctx context.Context, file string, book *hardcover.Bo
 				args = append(args, "--isbn", isbn)
 			}
 			if book.HardcoverID != 0 {
-				args = append(args, "--identifier", fmt.Sprintf("hardcover-id:%v", book.HardcoverID))
+				args = append(args, "--identifier", fmt.Sprintf("hardcover-id:%d", book.HardcoverID))
 			}
 			if book.Series != "" {
 				args = append(args, "--series", book.Series)
@@ -136,31 +134,27 @@ func (i *Importer) addAudiobook(ctx context.Context, file string, book *hardcove
 
 func (i *Importer) getExistingID(ctx context.Context, b *hardcover.Book) (*Book, bool) {
 	if i.idCache == nil {
-		i.idCache = map[string]*Book{}
+		i.idCache = map[int]*Book{}
 	}
-	id, ok := i.idCache[b.Title]
+	id, ok := i.idCache[b.HardcoverID]
 	if ok {
 		return id, true
 	}
-	books, err := i.list(ctx, "title:"+b.Title)
+	books, err := i.list(ctx, fmt.Sprintf("identifiers:hardcover-id:%d", b.HardcoverID))
 	if err != nil {
 		return nil, false
 	}
 
-	for _, cb := range books {
-		calibreAuthors := sets.NewMapSet(strings.Split(cb.Authors, " & ")...)
-		authors := sets.NewMapSet(b.Authors...)
-		if cb.Title == b.Title && maps.Equal(calibreAuthors, authors) {
-			i.idCache[b.Title] = &cb
-			return &cb, true
-		}
+	if len(books) == 0 {
+		return nil, false
 	}
-
-	return nil, false
+	cb := books[0]
+	i.idCache[b.HardcoverID] = &cb
+	return &cb, true
 }
 
 func (i *Importer) ClearCache() {
-	i.idCache = map[string]*Book{}
+	i.idCache = map[int]*Book{}
 }
 
 func downloadCover(ctx context.Context, url string) (string, error) {
