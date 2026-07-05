@@ -181,7 +181,7 @@ func (a *app) importFile(ctx context.Context, path string) error {
 		label = filepath.Base(path)
 	}
 
-	if err := a.importer.Add(ctx, path, meta, book); err != nil {
+	if err := a.importer.AddBook(ctx, path, meta, book); err != nil {
 		return err
 	}
 	log.Printf("  imported %q (isbn=%s)", label, meta.ISBN)
