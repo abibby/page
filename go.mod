@@ -3,6 +3,7 @@ module github.com/abibby/page
 go 1.26.3
 
 require (
+	github.com/davecgh/go-spew v1.1.1
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	google.golang.org/genai v1.62.0
 )

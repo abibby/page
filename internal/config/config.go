@@ -23,10 +23,12 @@ type Config struct {
 	QbitErrorTag string
 
 	// Calibre.
-	CalibreLibrary string
-	CalibreServer  string
-	CalibredbBin   string
-	AddDuplicates  bool
+	CalibreLibrary  string
+	CalibreServer   string
+	CalibreUsername string
+	CalibrePassword string
+	CalibredbBin    string
+	AddDuplicates   bool
 
 	// Hardcover GraphQL API.
 	HardcoverURL   string
@@ -57,21 +59,23 @@ func Load(envFile string) (*Config, error) {
 	}
 
 	c := &Config{
-		QbitURL:        getEnv("QBIT_URL", "http://localhost:8080"),
-		QbitUsername:   os.Getenv("QBIT_USERNAME"),
-		QbitPassword:   os.Getenv("QBIT_PASSWORD"),
-		QbitTag:        getEnv("QBIT_TAG", "book"),
-		QbitDoneTag:    getEnv("QBIT_DONE_TAG", "done"),
-		QbitErrorTag:   getEnv("QBIT_ERROR_TAG", "error"),
-		CalibreLibrary: os.Getenv("CALIBRE_LIBRARY"),
-		CalibreServer:  os.Getenv("CALIBRE_SERVER"),
-		CalibredbBin:   getEnv("CALIBREDB_BIN", "calibredb"),
-		AddDuplicates:  getBool("ADD_DUPLICATES", false),
-		HardcoverURL:   getEnv("HARDCOVER_URL", "https://api.hardcover.app/v1/graphql"),
-		HardcoverToken: os.Getenv("HARDCOVER_TOKEN"),
-		GeminiAPIKey:   os.Getenv("GEMINI_API_KEY"),
-		StateFile:      getEnv("STATE_FILE", "state.json"),
-		DryRun:         getBool("DRY_RUN", false),
+		QbitURL:         getEnv("QBIT_URL", "http://localhost:8080"),
+		QbitUsername:    os.Getenv("QBIT_USERNAME"),
+		QbitPassword:    os.Getenv("QBIT_PASSWORD"),
+		QbitTag:         getEnv("QBIT_TAG", "book"),
+		QbitDoneTag:     getEnv("QBIT_DONE_TAG", "done"),
+		QbitErrorTag:    getEnv("QBIT_ERROR_TAG", "error"),
+		CalibreLibrary:  os.Getenv("CALIBRE_LIBRARY"),
+		CalibreServer:   os.Getenv("CALIBRE_SERVER"),
+		CalibreUsername: os.Getenv("CALIBRE_USERNAME"),
+		CalibrePassword: os.Getenv("CALIBRE_PASSWORD"),
+		CalibredbBin:    getEnv("CALIBREDB_BIN", "calibredb"),
+		AddDuplicates:   getBool("ADD_DUPLICATES", false),
+		HardcoverURL:    getEnv("HARDCOVER_URL", "https://api.hardcover.app/v1/graphql"),
+		HardcoverToken:  os.Getenv("HARDCOVER_TOKEN"),
+		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
+		StateFile:       getEnv("STATE_FILE", "state.json"),
+		DryRun:          getBool("DRY_RUN", false),
 	}
 
 	interval, err := time.ParseDuration(getEnv("POLL_INTERVAL", "5m"))

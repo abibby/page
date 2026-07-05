@@ -9,17 +9,15 @@ import (
 )
 
 type Book struct {
-	ID          int               `json:"id"`
-	Title       string            `json:"title"`
-	Authors     string            `json:"authors"`
-	Formats     []string          `json:"formats"`
+	ID      int    `json:"id"`
+	Title   string `json:"title"`
+	Authors string `json:"authors"`
+	// Formats     []string          `json:"formats"`
 	Identifiers map[string]string `json:"identifiers"`
 }
 
 func (i *Importer) list(ctx context.Context, q string) ([]Book, error) {
 	b, err := i.exec(ctx, "list",
-		q,
-		"--with-library", i.Library,
 		"--for-machine",
 		"--fields", "title,authors,isbn,formats,identifiers",
 		"--search", q,
@@ -38,9 +36,19 @@ func (i *Importer) list(ctx context.Context, q string) ([]Book, error) {
 }
 
 func (i *Importer) exec(ctx context.Context, args ...string) ([]byte, error) {
-	b, err := exec.CommandContext(ctx, i.Bin, args...).CombinedOutput()
+	if i.cfg.CalibreServer == "" || i.cfg.CalibreUsername == "" || i.cfg.CalibrePassword == "" {
+		return nil, fmt.Errorf("CALIBRE_SERVER, CALIBRE_USERNAME, and CALIBRE_PASSWORD must all be set")
+	}
+	staticArgs := []string{
+		"--with-library", i.cfg.CalibreServer,
+		"--username", i.cfg.CalibreUsername,
+		"--password", i.cfg.CalibrePassword,
+	}
+	// fmt.Printf("%s %s\n", i.Bin, strings.Join(append(staticArgs, args...), " "))
+	b, err := exec.CommandContext(ctx, i.Bin, append(staticArgs, args...)...).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("calibredb command failed: %s %s: %w", i.Bin, strings.Join(args, " "), err)
 	}
+	// fmt.Printf("%s\n", b)
 	return b, nil
 }

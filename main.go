@@ -34,13 +34,7 @@ func main() {
 	}
 
 	hc := hardcover.New(cfg.HardcoverURL, cfg.HardcoverToken)
-	importer := &calibre.Importer{
-		Bin:           cfg.CalibredbBin,
-		Library:       cfg.CalibreLibrary,
-		Tag:           cfg.QbitTag,
-		AddDuplicates: cfg.AddDuplicates,
-		DryRun:        cfg.DryRun,
-	}
+	importer := calibre.NewClient(cfg)
 
 	app := &app{
 		cfg:      cfg,
