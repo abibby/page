@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/abibby/page/internal/bookmeta"
+	"github.com/abibby/page/internal/cache"
 	"github.com/abibby/page/internal/calibredb"
 	"github.com/abibby/page/internal/config"
 	"github.com/abibby/page/internal/hardcover"
@@ -28,7 +29,7 @@ type Importer struct {
 	client      *calibredb.Client
 	localClient *calibredb.Client
 
-	idCache map[int]*calibredb.Book
+	idCache *cache.Cache[int, *calibredb.Book]
 }
 
 func NewClient(cfg *config.Config) *Importer {
@@ -43,7 +44,7 @@ func NewClient(cfg *config.Config) *Importer {
 		localClient: calibredb.NewClient(cfg.CalibredbBin, &calibredb.GlobalFlags{
 			LibraryPath: cfg.CalibreLibrary,
 		}),
-		idCache: map[int]*calibredb.Book{},
+		idCache: cache.New[int, *calibredb.Book](),
 	}
 }
 
@@ -154,28 +155,26 @@ func linkOrCopy(oldname, newname string) error {
 }
 
 func (i *Importer) getExistingID(ctx context.Context, b *hardcover.Book) (*calibredb.Book, bool) {
-	id, ok := i.idCache[b.HardcoverID]
-	if ok {
-		return id, true
-	}
-	books, err := i.localClient.List(ctx, &calibredb.ListFlags{
-		Fields: []calibredb.Field{calibredb.FieldAll},
-		Search: fmt.Sprintf("identifiers:hardcover-id:%d", b.HardcoverID),
+	cb := i.idCache.Get(b.HardcoverID, time.Minute, func() *calibredb.Book {
+		books, err := i.localClient.List(ctx, &calibredb.ListFlags{
+			Fields: []calibredb.Field{calibredb.FieldAll},
+			Search: fmt.Sprintf("identifiers:hardcover-id:%d", b.HardcoverID),
+		})
+		if err != nil {
+			log.Printf("failed to fetch book list: %v", err)
+			return nil
+		}
+		if len(books) == 0 {
+			return nil
+		}
+		return &books[0]
 	})
-	if err != nil {
-		log.Printf("failed to fetch book list: %v", err)
-		return nil, false
-	}
-	if len(books) == 0 {
-		return nil, false
-	}
-	cb := books[0]
-	i.idCache[b.HardcoverID] = &cb
-	return &cb, true
+
+	return cb, cb != nil
 }
 
 func (i *Importer) ClearCache() {
-	i.idCache = map[int]*calibredb.Book{}
+	i.idCache = cache.New[int, *calibredb.Book]()
 }
 
 func downloadCover(ctx context.Context, url string) (string, error) {
