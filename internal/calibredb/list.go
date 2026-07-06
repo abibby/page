@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Field string
@@ -87,24 +88,23 @@ func (o *ListFlags) appendArgs(args []string) []string {
 }
 
 type Book struct {
-	ID          int               `json:"id"`
-	Title       string            `json:"title"`
-	Authors     string            `json:"authors"`
-	AuthorSort  string            `json:"author_sort"`
-	Formats     []string          `json:"formats"`
-	Identifiers map[string]string `json:"identifiers"`
-
-	cover         string `json:"cover"`         //: "/home/adam/books/James Islington/The Light of All That Falls (1)/cover.jpg",
-	isbn          string `json:"isbn"`          //: "",
-	languages     string `json:"languages"`     //: [],
-	last_modified string `json:"last_modified"` //: "2026-07-05T22:57:23+00:00",
-	pubdate       string `json:"pubdate"`       //: "0101-01-01T00:00:00+00:00",
-	series        string `json:"series"`        //: "The Licanius Trilogy",
-	series_index  string `json:"series_index"`  //: 3.0,
-	size          string `json:"size"`          //: 5283375,
-	tags          string `json:"tags"`          //: [],
-	timestamp     string `json:"timestamp"`     //: "2026-07-05T22:54:50+00:00",
-	uuid          string `json:"uuid"`          //: "a4280bbb-0087-4869-8e21-52600587cb91"
+	ID           int               `json:"id"`
+	Title        string            `json:"title"`
+	Authors      string            `json:"authors"`
+	AuthorSort   string            `json:"author_sort"`
+	Formats      []string          `json:"formats"`
+	Identifiers  map[string]string `json:"identifiers"`
+	Cover        string            `json:"cover"`
+	ISBN         string            `json:"isbn"`
+	Languages    []string          `json:"languages"`
+	LastModified time.Time         `json:"last_modified"`
+	Pubdate      time.Time         `json:"pubdate"`
+	Series       string            `json:"series"`
+	SeriesIndex  float64           `json:"series_index"`
+	Size         int               `json:"size"`
+	Tags         []string          `json:"tags"`
+	Timestamp    string            `json:"timestamp"`
+	UUID         string            `json:"uuid"`
 }
 
 func (i *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {

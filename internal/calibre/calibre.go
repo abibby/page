@@ -113,27 +113,46 @@ func (i *Importer) addAudiobook(ctx context.Context, file string, book *hardcove
 		}
 	}
 
-	newFile := path.Join(path.Dir(existingBook.Formats[0]), path.Base(file))
+	newFile := path.Join(path.Dir(existingBook.Cover), path.Base(file))
 
 	if i.DryRun {
 		fmt.Printf("[dry-run] ln '%s' '%s'\n", file, newFile)
 		return nil
 	}
 
-	err := os.Link(file, newFile)
+	err := linkOrCopy(file, newFile)
 	if err != nil {
 		return fmt.Errorf("hard link failed: %w", err)
 	}
 	return nil
 }
 
-//	func (i *Importer) bookPath(book *calibredb.Book) string {
-//		return path.Join(
-//			i.libraryPath,
-//			strings.Split(book.Authors, " & ")[0],
-//			fmt.Sprintf("%s (%d)", book.Title, book.ID),
-//		)
-//	}
+func linkOrCopy(oldname, newname string) error {
+	err := os.Link(oldname, newname)
+	if err == nil {
+		return nil
+	}
+
+	source, err := os.Open(oldname)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer source.Close()
+
+	destination, err := os.Create(newname)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destination.Close()
+
+	_, err = io.Copy(destination, source)
+	if err != nil {
+		return fmt.Errorf("failed to copy contents: %w", err)
+	}
+
+	return destination.Sync()
+}
+
 func (i *Importer) getExistingID(ctx context.Context, b *hardcover.Book) (*calibredb.Book, bool) {
 	id, ok := i.idCache[b.HardcoverID]
 	if ok {
