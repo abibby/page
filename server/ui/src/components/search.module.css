@@ -1,0 +1,58 @@
+.bookList {
+  display: grid;
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.book img {
+  width: 15rem;
+  height: 400px;
+  object-fit: cover;
+  /* background-color: green; */
+}
+
+.bookList .book img {
+    width: 100%;
+}
+
+.torrentList {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.torrent {
+  display: flex;
+  cursor: pointer;
+}
+
+.torrent > * {
+  padding: .15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.torrent > :nth-child(1) {
+  width: calc(100% - 400px);
+  border: solid 1px black;
+}
+.torrent > :nth-child(2) {
+  width: 150px;
+  border: solid 1px black;
+}
+.torrent > :nth-child(3) {
+  width: 50px;
+  border: solid 1px black;
+}
+.torrent > :nth-child(4) {
+  width: 50px;
+  border: solid 1px black;
+}
+.torrent > :nth-child(5) {
+  width: 150px;
+  border: solid 1px black;
+}

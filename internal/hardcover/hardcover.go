@@ -63,7 +63,7 @@ type gqlError struct {
 }
 
 // edition/book shapes matching the queried fields.
-type apiBook struct {
+type RawBook struct {
 	ID            any    `json:"id"`
 	Title         string `json:"title"`
 	ReleaseYear   int    `json:"release_year"`
@@ -89,7 +89,7 @@ type apiEdition struct {
 	Title  string  `json:"title"`
 	ISBN13 string  `json:"isbn_13"`
 	ISBN10 string  `json:"isbn_10"`
-	Book   apiBook `json:"book"`
+	Book   RawBook `json:"book"`
 }
 
 // LookupByISBN finds the edition matching an ISBN-13 or ISBN-10 and returns its
@@ -146,7 +146,7 @@ func (c *Client) SearchByTitleAuthor(ctx context.Context, title, author string) 
   }
 }`
 	type hit struct {
-		Document apiBook `json:"document"`
+		Document RawBook `json:"document"`
 	}
 	var resp struct {
 		Search struct {
@@ -185,7 +185,40 @@ func (c *Client) SearchByTitleAuthor(ctx context.Context, title, author string) 
 	return nil, ErrNotFound
 }
 
-func bookFromAPI(b apiBook) Book {
+func (c *Client) Query(ctx context.Context, q string) ([]RawBook, error) {
+	if strings.TrimSpace(q) == "" {
+		return []RawBook{}, nil
+	}
+	query := `query ($query: String!) {
+  search(query: $query) {
+    results
+  }
+}`
+	type hit struct {
+		Document RawBook `json:"document"`
+	}
+	var resp struct {
+		Search struct {
+			Results struct {
+				Hits []hit `json:"hits"`
+			} `json:"results"`
+		} `json:"search"`
+	}
+
+	if err := c.do(ctx, query, map[string]any{"query": q}, &resp); err != nil {
+		return nil, err
+	}
+
+	docs := make([]RawBook, len(resp.Search.Results.Hits))
+
+	for i, h := range resp.Search.Results.Hits {
+		docs[i] = h.Document
+	}
+
+	return docs, nil
+}
+
+func bookFromAPI(b RawBook) Book {
 	var hcID int
 
 	switch id := b.ID.(type) {

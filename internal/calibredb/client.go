@@ -61,10 +61,11 @@ func (f *GlobalFlags) appendArgs(args []string) []string {
 }
 
 func NewClient(bin string, flags *GlobalFlags) *Client {
-	return &Client{
+	c := &Client{
 		bin:         bin,
 		globalFlags: flags,
 	}
+	return c
 }
 
 type appendArgser interface {
@@ -77,7 +78,7 @@ func (i *Client) exec(ctx context.Context, write bool, flags appendArgser, args 
 		staticArgs = i.globalFlags.appendArgs(staticArgs)
 	}
 	staticArgs = append(staticArgs, args...)
-	if !reflect.ValueOf(flags).IsNil() {
+	if flags != nil && !reflect.ValueOf(flags).IsNil() {
 		staticArgs = flags.appendArgs(staticArgs)
 	}
 

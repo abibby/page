@@ -26,25 +26,17 @@ type Importer struct {
 	DryRun      bool
 	libraryPath string
 
-	client      *calibredb.Client
-	localClient *calibredb.Client
+	client *calibredb.Client
 
 	idCache *cache.Cache[int, *calibredb.Book]
 }
 
-func NewClient(cfg *config.Config) *Importer {
+func NewClient(cfg *config.Config, client *calibredb.Client) *Importer {
 	return &Importer{
 		DryRun:      cfg.DryRun,
 		libraryPath: cfg.CalibreLibrary,
-		client: calibredb.NewClient(cfg.CalibredbBin, &calibredb.GlobalFlags{
-			LibraryPath: cfg.CalibreServer,
-			Username:    cfg.CalibreUsername,
-			Password:    cfg.CalibrePassword,
-		}),
-		localClient: calibredb.NewClient(cfg.CalibredbBin, &calibredb.GlobalFlags{
-			LibraryPath: cfg.CalibreLibrary,
-		}),
-		idCache: cache.New[int, *calibredb.Book](),
+		client:      client,
+		idCache:     cache.New[int, *calibredb.Book](),
 	}
 }
 
@@ -156,7 +148,7 @@ func linkOrCopy(oldname, newname string) error {
 
 func (i *Importer) getExistingID(ctx context.Context, b *hardcover.Book) (*calibredb.Book, bool) {
 	cb := i.idCache.Get(b.HardcoverID, time.Minute, func() *calibredb.Book {
-		books, err := i.localClient.List(ctx, &calibredb.ListFlags{
+		books, err := i.client.List(ctx, &calibredb.ListFlags{
 			Fields: []calibredb.Field{calibredb.FieldAll},
 			Search: fmt.Sprintf("identifiers:hardcover-id:%d", b.HardcoverID),
 		})

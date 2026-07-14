@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/abibby/page/internal/calibredb/flags"
 )
 
 // Add the specified files as books to the database. You can also specify
@@ -15,81 +17,48 @@ import (
 // the arguments in quotation marks. For example: “/some path/with spaces”
 type AddFlags struct {
 	// Set the authors of the added book(s)
-	Authors []string
+	Authors []string `flag:"--authors|join: & "`
 
 	// If books with similar titles and authors are found, merge the incoming formats (files) automatically into existing book records. A value of "ignore" means duplicate formats are discarded. A value of "overwrite" means duplicate formats in the library are overwritten with the newly added files. A value of "new_record" means duplicate formats are placed into a new book record.
-	AutoMerge bool
+	AutoMerge bool `flag:"--automerge"`
 
 	// Path to the cover to use for the added book
-	Cover string
+	Cover string `flag:"--cover"`
 
 	// Add books to database even if they already exist. Comparison is done based on book titles and authors. Note that the --automerge option takes precedence.
-	Duplicates bool
+	Duplicates bool `flag:"--duplicates"`
 
 	// Add an empty book (a book with no formats)
-	Empty bool
+	Empty bool `flag:"--empty"`
 
 	// Set the identifiers for this book, e.g. -I asin:XXX -I isbn:YYY
 	Identifier map[string]string
 
 	// Set the ISBN of the added book(s)
-	ISBN string
+	ISBN string `flag:"--isbn"`
 
 	// A comma separated list of languages (best to use ISO639 language codes, though some language names may also be recognized)
-	Languages []string
+	Languages []string `flag:"--languages|join:,"`
 
 	// Set the series of the added book(s)
-	Series string
+	Series string `flag:"--series"`
 
 	// Set the series number of the added book(s)
-	SeriesIndex float64
+	SeriesIndex float64 `flag:"--series-index"`
 
 	// Set the tags of the added book(s)
-	Tags []string
+	Tags []string `flag:"--tags|join:,"`
 
 	// Set the title of the added book(s)
-	Title string
+	Title string `flag:"--title"`
 }
 
 func (f *AddFlags) appendArgs(args []string) []string {
-	if len(f.Authors) > 0 {
-		args = append(args, "--authors", f.AuthorsString())
-	}
-
-	if f.AutoMerge {
-		args = append(args, "--automerge")
-	}
-	if f.Cover != "" {
-		args = append(args, "--cover", f.Cover)
-	}
-	if f.Duplicates {
-		args = append(args, "--duplicates")
-	}
-	if f.Empty {
-		args = append(args, "--empty")
-	}
+	args = flags.Append(args, f)
 	if f.Identifier != nil {
 		for k, v := range f.Identifier {
 			args = append(args, "--identifier", fmt.Sprintf("%s:%s", k, v))
 		}
-	}
-	if f.ISBN != "" {
-		args = append(args, "--isbn", f.ISBN)
-	}
-	if len(f.Languages) > 0 {
-		args = append(args, "--languages", strings.Join(f.Languages, ", "))
-	}
-	if f.Series != "" {
-		args = append(args, "--series", f.Series)
-	}
-	if f.SeriesIndex != 0 {
-		args = append(args, "--series-index", strconv.FormatFloat(f.SeriesIndex, 'f', -1, 64))
-	}
-	if len(f.Tags) > 0 {
-		args = append(args, "--tags", strings.Join(f.Tags, ", "))
-	}
-	if f.Title != "" {
-		args = append(args, "--title", f.Title)
 	}
 	return args
 }

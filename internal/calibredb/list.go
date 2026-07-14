@@ -3,9 +3,9 @@ package calibredb
 import (
 	"context"
 	"encoding/json"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/abibby/page/internal/calibredb/flags"
 )
 
 type Field string
@@ -36,22 +36,22 @@ const (
 
 type ListFlags struct {
 	// Sort results in ascending order
-	Ascending bool
+	Ascending bool `flag:"--ascending"`
 
 	// The fields to display when listing books in the database. Should be a comma separated list of fields. Available fields: author_sort, authors, comments, cover, formats, identifiers, isbn, languages, last_modified, pubdate, publisher, rating, series, series_index, size, tags, template, timestamp, title, uuid Default: title,authors. The special field "all" can be used to select all fields. In addition to the builtin fields above, custom fields are also available as *field_name, for example, for a custom field #rating, use the name: *rating
-	Fields []Field
+	Fields []Field `flag:"--fields|join:,"`
 
 	// The maximum number of results to display. Default: all
-	Limit int
+	Limit int `flag:"--limit"`
 
 	// The prefix for all file paths. Default is the absolute path to the library folder.
-	Prefix string
+	Prefix string `flag:"--prefix"`
 
 	// Filter the results by the search query. For the format of the search query, please see the search related documentation in the User Manual. Default is to do no filtering.
-	Search string
+	Search string `flag:"--search"`
 
 	// The field by which to sort the results. You can specify multiple fields by separating them with commas. Available fields: author_sort, authors, comments, cover, formats, identifiers, isbn, languages, last_modified, pubdate, publisher, rating, series, series_index, size, tags, template, timestamp, title, uuid Default: id. In addition to the builtin fields above, custom fields are also available as *field_name, for example, for a custom field #rating, use the name: *rating
-	SortBy Field
+	SortBy Field `flag:"--sort-by"`
 
 	// // The template to run if "template" is in the field list. Note that templates are ignored while connecting to a calibre server. Default: None
 	// Template string
@@ -65,24 +65,7 @@ type ListFlags struct {
 }
 
 func (o *ListFlags) appendArgs(args []string) []string {
-	if o.Ascending {
-		args = append(args, "--ascending")
-	}
-	if len(o.Fields) > 0 {
-		args = append(args, "--fields", joinFields(o.Fields, ", "))
-	}
-	if o.Limit != 0 {
-		args = append(args, "--limit", strconv.Itoa(o.Limit))
-	}
-	if o.Prefix != "" {
-		args = append(args, "--prefix", o.Prefix)
-	}
-	if o.Search != "" {
-		args = append(args, "--search", o.Search)
-	}
-	if o.SortBy != "" {
-		args = append(args, "--sort-by", string(o.SortBy))
-	}
+	args = flags.Append(args, o)
 	args = append(args, "--for-machine")
 	return args
 }
@@ -120,27 +103,4 @@ func (i *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {
 		return nil, err
 	}
 	return books, nil
-}
-
-func joinFields(fields []Field, sep string) string {
-	switch len(fields) {
-	case 0:
-		return ""
-	case 1:
-		return string(fields[0])
-	}
-
-	n := (len(fields) - 1) * len(sep)
-	for _, f := range fields {
-		n += len(f)
-	}
-
-	var b strings.Builder
-	b.Grow(n)
-	b.WriteString(string(fields[0]))
-	for _, s := range fields[1:] {
-		b.WriteString(sep)
-		b.WriteString(string(s))
-	}
-	return b.String()
 }

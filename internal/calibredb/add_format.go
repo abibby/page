@@ -3,6 +3,8 @@ package calibredb
 import (
 	"context"
 	"strconv"
+
+	"github.com/abibby/page/internal/calibredb/flags"
 )
 
 // Add the e-book in ebook_file to the available formats for the logical book
@@ -14,20 +16,14 @@ import (
 // the arguments in quotation marks. For example: “/some path/with spaces”
 type AddFormatFlags struct {
 	// Add the file as an extra data file to the book, not an ebook format
-	AsExtraDataFile bool
+	AsExtraDataFile bool `flag:"--as-extra-data-file"`
 
 	// Do not replace the format if it already exists
-	DontReplace bool
+	DontReplace bool `flag:"--dont-replace"`
 }
 
 func (o *AddFormatFlags) appendArgs(args []string) []string {
-	if o.AsExtraDataFile {
-		args = append(args, "--as-extra-data-file")
-	}
-	if o.DontReplace {
-		args = append(args, "--dont-replace")
-	}
-	return args
+	return flags.Append(args, o)
 }
 
 func (i *Client) AddFormat(ctx context.Context, id int, ebookFile string, options *AddFormatFlags) error {
