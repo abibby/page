@@ -3,7 +3,9 @@ package importer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,19 +21,21 @@ import (
 var ErrNoBook = errors.New("no book")
 
 type Importer struct {
-	cfg      *config.Config
-	hc       *hardcover.Client
-	importer *calibre.Importer
+	cfg     *config.Config
+	hc      *hardcover.Client
+	calibre *calibre.Importer
+	log     *slog.Logger
 
 	hcCache map[string]*hardcover.Book
 }
 
-func New(cfg *config.Config, hc *hardcover.Client, importer *calibre.Importer) *Importer {
+func New(cfg *config.Config, hc *hardcover.Client, importer *calibre.Importer, logger *slog.Logger) *Importer {
 	return &Importer{
-		cfg:      cfg,
-		hc:       hc,
-		importer: importer,
-		hcCache:  map[string]*hardcover.Book{},
+		cfg:     cfg,
+		hc:      hc,
+		calibre: importer,
+		log:     logger,
+		hcCache: map[string]*hardcover.Book{},
 	}
 }
 
@@ -60,11 +64,11 @@ func (a *Importer) RunPass(ctx context.Context) error {
 			continue
 		}
 		if err := a.processTorrent(ctx, qb, t); err != nil {
-			log.Printf("torrent %q: %v", t.Name, err)
+			a.log.Error("torrent failed to process", "torrent", t.Name, "error", err)
 			continue // leave unmarked so we retry next pass
 		}
 		if err := qb.AddTag(&t, a.cfg.QbitDoneTag); err != nil {
-			log.Printf("state mark %q: %v", t.Name, err)
+			a.log.Error("torrent failed to add done tag", "torrent", t.Name, "error", err)
 		}
 	}
 	return nil
@@ -84,12 +88,12 @@ func (a *Importer) processTorrent(ctx context.Context, qb *qbittorrent.Client, t
 		}
 		hostPath := a.cfg.RemapPath(t.AbsPath(f))
 		if _, err := os.Stat(hostPath); err != nil {
-			log.Printf("  skip %s: not readable on host (%v)", filepath.Base(hostPath), err)
+			a.log.Warn("file not readable on host, skipping", "file", filepath.Base(hostPath), "error", err)
 			hasError = true
 			continue
 		}
 		if err := a.ImportFile(ctx, hostPath); err != nil {
-			log.Printf("  %s: %v", filepath.Base(hostPath), err)
+			a.log.Warn("failed to import file", "file", filepath.Base(hostPath), "error", err)
 			hasError = true
 			continue
 		}
@@ -97,12 +101,12 @@ func (a *Importer) processTorrent(ctx context.Context, qb *qbittorrent.Client, t
 	}
 
 	if imported == 0 {
-		log.Printf("torrent %q: no book files imported", t.Name)
+		a.log.Info("no book files imported", "torrent", t.Name)
 	}
 
 	if hasError {
 		if err := qb.AddTag(&t, a.cfg.QbitErrorTag); err != nil {
-			log.Printf("state mark %q: %v", t.Name, err)
+			a.log.Error("torrent failed to add error tag", "torrent", t.Name, "error", err)
 		}
 	}
 	return nil
@@ -124,8 +128,7 @@ func (a *Importer) findBook(ctx context.Context, path string) (*hardcover.Book, 
 func (a *Importer) ImportFile(ctx context.Context, path string) error {
 	book, meta, err := a.findBook(ctx, path)
 	if err != nil {
-		log.Printf("  %s: metadata extract failed (%v); importing without enrichment", filepath.Base(path), err)
-		return nil
+		return fmt.Errorf("metadata extract failed: %w", err)
 	}
 
 	label := meta.Title
@@ -136,10 +139,10 @@ func (a *Importer) ImportFile(ctx context.Context, path string) error {
 		label = filepath.Base(path)
 	}
 
-	if err := a.importer.AddBook(ctx, path, meta, book); err != nil {
+	if err := a.calibre.AddBook(ctx, path, meta.IsAudiobook, book); err != nil {
 		return err
 	}
-	log.Printf("  imported %q (isbn=%s)", label, meta.ISBN)
+	a.log.Info("imported book", "title", label, "isbn", meta.ISBN)
 	return nil
 }
 
@@ -181,5 +184,5 @@ func (a *Importer) lookup(ctx context.Context, meta bookmeta.Meta) (*hardcover.B
 func (a *Importer) clearCache() {
 	a.hcCache = map[string]*hardcover.Book{}
 
-	a.importer.ClearCache()
+	a.calibre.ClearCache()
 }

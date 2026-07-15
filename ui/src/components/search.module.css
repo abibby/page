@@ -4,19 +4,19 @@
   padding: 0;
   margin: 0;
 
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: 1rem;
 }
 
 .book img {
-  width: 15rem;
-  height: 400px;
+  width: 10rem;
+  aspect-ratio: 0.618;
   object-fit: cover;
   /* background-color: green; */
 }
 
 .bookList .book img {
-    width: 100%;
+  width: 100%;
 }
 
 .torrentList {
@@ -25,34 +25,79 @@
   margin: 0;
 }
 
+.torrentHeader {
+  font-weight: bold;
+}
 .torrent {
-  display: flex;
+  display: grid;
   cursor: pointer;
+
+  grid-template-areas:
+    "title   title   title"
+    "size    seeders peers "
+    "tracker tracker tracker";
+
+  margin-bottom: 1rem;
+  gap: 0.25rem;
 }
 
 .torrent > * {
-  padding: .15rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .torrent > :nth-child(1) {
-  width: calc(100% - 400px);
-  border: solid 1px black;
+  grid-area: title;
 }
 .torrent > :nth-child(2) {
-  width: 150px;
-  border: solid 1px black;
+  grid-area: size;
 }
 .torrent > :nth-child(3) {
-  width: 50px;
-  border: solid 1px black;
+  text-align: right;
+  grid-area: seeders;
+}
+.torrent > :nth-child(3)::after {
+  padding-left: 0.25rem;
+  content: "/";
 }
 .torrent > :nth-child(4) {
-  width: 50px;
-  border: solid 1px black;
+  grid-area: peers;
 }
 .torrent > :nth-child(5) {
-  width: 150px;
-  border: solid 1px black;
+  grid-area: tracker;
+}
+
+@media (min-width: 750px) {
+  .torrentHeader {
+    display: none;
+  }
+  .torrent {
+    display: flex;
+    margin-bottom: 0;
+  }
+  .torrent > * {
+    padding: 0.25rem;
+  }
+  .torrent > * {
+    border-bottom: solid 1px black;
+  }
+  .torrent > :nth-child(1) {
+    width: calc(100% - 400px);
+  }
+  .torrent > :nth-child(2) {
+    width: 150px;
+  }
+  .torrent > :nth-child(3) {
+    width: 50px;
+    text-align: initial;
+  }
+  .torrent > :nth-child(3)::after {
+    content: none;
+  }
+  .torrent > :nth-child(4) {
+    width: 50px;
+  }
+  .torrent > :nth-child(5) {
+    width: 150px;
+  }
 }

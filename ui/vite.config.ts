@@ -1,7 +1,20 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, loadEnv, type UserConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { resolve } from "node:path";
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
-})
+export default defineConfig(({ mode }): UserConfig => {
+  const env = {
+    ...process.env,
+    ...loadEnv(mode, resolve(__dirname, "..")),
+  };
+
+  return {
+    plugins: [react()],
+    server: {
+      port: env.VITE_PORT ? Number(env.VITE_PORT) : undefined,
+      proxy: {
+        "/api": env.VITE_PROXY_HOST ?? "http://localhost:8010",
+      },
+    },
+  };
+});

@@ -82,13 +82,13 @@ export type BaseRequest = {
   signal?: AbortSignal;
 };
 
-export type ListRequest = BaseRequest & {
+export type BookListRequest = BaseRequest & {
   search?: string;
   order?: Field;
   ascending?: boolean;
 };
 
-export async function list(r: ListRequest): Promise<Book[]> {
+export async function bookList(r: BookListRequest): Promise<Book[]> {
   const p = new URLSearchParams();
   p.set("search", r.search ?? "");
   if (r.order) {
@@ -97,7 +97,26 @@ export async function list(r: ListRequest): Promise<Book[]> {
   if (r.ascending) {
     p.set("ascending", "true");
   }
-  return fetch("/api/list?" + p.toString()).then((r) => r.json());
+  return fetch("/api/book?" + p.toString(), {
+    signal: r.signal,
+  }).then((r) => r.json());
+}
+
+export type BookImportRequest = BaseRequest & {
+  file: File;
+  hardcover_id?: Number;
+};
+
+export async function bookImport(r: BookImportRequest): Promise<Book[]> {
+  var data = new FormData();
+  data.append("file", r.file);
+  if (r.hardcover_id) {
+    data.append("hardcover_id", String(r.hardcover_id));
+  }
+  return fetch("/api/book", {
+    method: "POST",
+    body: data,
+  }).then((r) => r.json());
 }
 
 export type HardcoverSearchRequest = BaseRequest & {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/abibby/page/config"
 	"github.com/abibby/page/services/calibredb"
 	"github.com/abibby/page/services/importer"
 	"github.com/abibby/salusa/request"
@@ -27,6 +29,7 @@ type BookListRequest struct {
 
 	Ctx context.Context   `inject:""`
 	DB  *calibredb.Client `inject:""`
+	Cfg *config.Config    `inject:""`
 }
 
 var BookList = request.Handler(func(r *BookListRequest) ([]calibredb.Book, error) {
@@ -45,7 +48,7 @@ var BookList = request.Handler(func(r *BookListRequest) ([]calibredb.Book, error
 		return nil, err
 	}
 	for i := range books {
-		cleanBook(&books[i])
+		cleanBook(r.Cfg, &books[i])
 	}
 	return books, nil
 })
@@ -55,6 +58,7 @@ type BookViewRequest struct {
 
 	Ctx context.Context   `inject:""`
 	DB  *calibredb.Client `inject:""`
+	Cfg *config.Config    `inject:""`
 }
 
 var BookView = request.Handler(func(r *BookViewRequest) (*FullBook, error) {
@@ -76,7 +80,7 @@ var BookView = request.Handler(func(r *BookViewRequest) (*FullBook, error) {
 		return nil, err
 	}
 
-	cleanBook(&b)
+	cleanBook(r.Cfg, &b)
 
 	return &FullBook{
 		Book:        b,
@@ -85,20 +89,23 @@ var BookView = request.Handler(func(r *BookViewRequest) (*FullBook, error) {
 })
 
 type BookImportRequest struct {
+	HardcoverID int     `json:"hardcover_id"`
+	File        fs.File `json:"file"`
+
 	Request *http.Request      `inject:""`
 	Ctx     context.Context    `inject:""`
 	App     *importer.Importer `inject:""`
 }
 
 var BookImport = request.Handler(func(r *BookImportRequest) (any, error) {
-	rf, hed, err := r.Request.FormFile("file")
+	defer r.File.Close()
+
+	stat, err := r.File.Stat()
 	if err != nil {
 		return nil, err
 	}
-	defer rf.Close()
-	// defer r.File.Close()
 
-	f, err := os.CreateTemp("", "book-*-"+hed.Filename)
+	f, err := os.CreateTemp("", "book-*-"+stat.Name())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +113,7 @@ var BookImport = request.Handler(func(r *BookImportRequest) (any, error) {
 
 	defer os.Remove(f.Name())
 
-	_, err = io.Copy(f, rf)
+	_, err = io.Copy(f, r.File)
 	if err != nil {
 		return nil, err
 	}
@@ -119,13 +126,13 @@ var BookImport = request.Handler(func(r *BookImportRequest) (any, error) {
 	return nil, nil
 })
 
-func cleanBook(book *calibredb.Book) {
+func cleanBook(cfg *config.Config, book *calibredb.Book) {
 	for i, f := range book.Formats {
-		book.Formats[i] = cleanPath(f)
+		book.Formats[i] = cleanPath(cfg, f)
 	}
-	book.Cover = cleanPath(book.Cover)
+	book.Cover = cleanPath(cfg, book.Cover)
 }
 
-func cleanPath(p string) string {
-	return "/d" + strings.TrimPrefix(p, "/mnt/volume1/Public/Calibre_Library")
+func cleanPath(cfg *config.Config, p string) string {
+	return "/api/d" + strings.TrimPrefix(p, cfg.CalibreLibrary)
 }

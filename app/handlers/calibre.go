@@ -12,5 +12,5 @@ type CalibreDataRequest struct {
 }
 
 var CalibreData = request.Handler(func(r *CalibreDataRequest) (http.Handler, error) {
-	return http.StripPrefix("/d", http.FileServer(http.Dir(r.Cfg.CalibreLibrary))), nil
+	return http.FileServer(http.Dir(r.Cfg.CalibreLibrary)), nil
 })

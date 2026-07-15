@@ -1,9 +1,8 @@
 import {
   useCallback,
-  useEffect,
   useRef,
   useState,
-  type InputEventHandler,
+  type PropsWithChildren,
   type SubmitEventHandler,
 } from "react";
 import { useAsync } from "../hooks/use-async";
@@ -14,7 +13,6 @@ import {
   type HardcoverBook,
   type Torrent,
 } from "../api/api";
-import { useDebounce } from "../hooks/use-debounce";
 import styles from "./search.module.css";
 
 export function Search() {
@@ -68,7 +66,7 @@ export function Search() {
           onSelectBook={selectHardcoverBook}
         />
       ) : (
-        <Book book={hardcoverBook} />
+        <HardcoverBook book={hardcoverBook} />
       )}
 
       <form onSubmit={searchTorrentSubmit}>
@@ -81,10 +79,7 @@ export function Search() {
       </form>
 
       {!torrent ? (
-        <TorrentSearch
-          search={torrentSearch}
-          onSelectTorrent={setTorrent}
-        />
+        <TorrentSearch search={torrentSearch} onSelectTorrent={setTorrent} />
       ) : (
         <TorrentInfo torrent={torrent} />
       )}
@@ -126,25 +121,45 @@ function BookSearch(params: BookSearchParams) {
     <ul className={styles.bookList}>
       {books.value.map((b) => (
         <li key={b.id} onClick={() => params.onSelectBook(b)}>
-          <Book book={b} />
+          <HardcoverBook book={b} />
         </li>
       ))}
     </ul>
   );
 }
 
-type BookProps = {
+type HardcoverBookProps = {
   book: HardcoverBook;
 };
 
-function Book(props: BookProps) {
+function HardcoverBook(props: HardcoverBookProps) {
+  return (
+    <Book
+      title={props.book.title}
+      coverURL={props.book.image.url}
+      author={hardcoverAuthor(props.book)}
+    />
+  );
+}
+
+export type BookProps = {
+  title: string;
+  coverURL: string;
+  author: string;
+};
+
+export function Book(props: BookProps) {
   return (
     <div className={styles.book}>
-      <img src={props.book.image.url} alt="" />
-      <div>{props.book.title}</div>
-      <div>{hardcoverAuthor(props.book)}</div>
+      <img src={props.coverURL} alt="" />
+      <div>{props.title}</div>
+      <div>{props.author}</div>
     </div>
   );
+}
+
+export function BookList(props: PropsWithChildren) {
+  return <ul className={styles.bookList}>{props.children}</ul>;
 }
 
 function hardcoverAuthor(book: HardcoverBook): string {
@@ -163,7 +178,7 @@ function TorrentSearch(params: TorrentSearchParams) {
   const torrents = useAsync(
     useCallback(
       async (s: AbortSignal) => {
-        console.log(params.search)
+        console.log(params.search);
         if (params.search === "") {
           return [];
         }
@@ -175,7 +190,7 @@ function TorrentSearch(params: TorrentSearchParams) {
       [params.search],
     ),
   );
-  console.log(torrents)
+
   if (torrents.loading) {
     return <div>Loading...</div>;
   }
@@ -184,8 +199,19 @@ function TorrentSearch(params: TorrentSearchParams) {
     return <div>{torrents.error.toString()}</div>;
   }
 
+  if (torrents.value.length === 0) {
+    return <div>No Results</div>;
+  }
+
   return (
     <ul className={styles.torrentList}>
+      <div className={`${styles.torrent} ${styles.torrentHeader}`}>
+        <div>Title</div>
+        <div>Size</div>
+        <div>Seeders</div>
+        <div>Peers</div>
+        <div>Tracker</div>
+      </div>
       {torrents.value.map((t) => (
         <li key={t.id} onClick={() => params.onSelectTorrent(t)}>
           <TorrentInfo torrent={t} />
@@ -204,8 +230,8 @@ function TorrentInfo(props: TorrentInfoProps) {
     <div className={styles.torrent}>
       <div>{props.torrent.title}</div>
       <div>{formatBytes(props.torrent.size)}</div>
-      <div>{props.torrent.peers}</div>
       <div>{props.torrent.seeders}</div>
+      <div>{props.torrent.peers}</div>
       <div>{props.torrent.tracker}</div>
     </div>
   );

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/abibby/page/config"
-	"github.com/abibby/page/services/bookmeta"
 	"github.com/abibby/page/services/cache"
 	"github.com/abibby/page/services/calibredb"
 	"github.com/abibby/page/services/hardcover"
@@ -42,8 +41,8 @@ func NewClient(cfg *config.Config, client *calibredb.Client) *Importer {
 
 // AddBook imports file into the Calibre library, applying metadata from book (which
 // may be nil if no Hardcover match was found).
-func (i *Importer) AddBook(ctx context.Context, file string, meta *bookmeta.Meta, book *hardcover.Book) error {
-	if meta.IsAudiobook {
+func (i *Importer) AddBook(ctx context.Context, file string, isAudiobook bool, book *hardcover.Book) error {
+	if isAudiobook {
 		return i.addAudiobook(ctx, file, book)
 	}
 	return i.addEbook(ctx, file, book)

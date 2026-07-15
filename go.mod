@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/abibby/fileserver v0.0.0-20221208191705-087686654550
+	github.com/abibby/nulls v1.1.0
 	github.com/abibby/salusa v0.21.0
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/go-openapi/spec v0.22.6
