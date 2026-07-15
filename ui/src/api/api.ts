@@ -144,3 +144,14 @@ export async function torrentSearch(
     signal: r.signal,
   }).then((r) => r.json());
 }
+
+export type TorrentActiveRequest = BaseRequest & {};
+export async function torrentActive(
+  r: TorrentActiveRequest = {},
+): Promise<Torrent[]> {
+  return fetch("/api/torrent/active", {
+    signal: r.signal,
+  }).then((r) => r.json());
+}
+
+torrentActive();

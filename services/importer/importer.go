@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/abibby/page/config"
 	"github.com/abibby/page/services/bookmeta"
@@ -24,16 +23,18 @@ type Importer struct {
 	cfg     *config.Config
 	hc      *hardcover.Client
 	calibre *calibre.Importer
+	qbt     *qbittorrent.Client
 	log     *slog.Logger
 
 	hcCache map[string]*hardcover.Book
 }
 
-func New(cfg *config.Config, hc *hardcover.Client, importer *calibre.Importer, logger *slog.Logger) *Importer {
+func New(cfg *config.Config, hc *hardcover.Client, importer *calibre.Importer, qbt *qbittorrent.Client, logger *slog.Logger) *Importer {
 	return &Importer{
 		cfg:     cfg,
 		hc:      hc,
 		calibre: importer,
+		qbt:     qbt,
 		log:     logger,
 		hcCache: map[string]*hardcover.Book{},
 	}
@@ -44,38 +45,32 @@ func New(cfg *config.Config, hc *hardcover.Client, importer *calibre.Importer, l
 func (a *Importer) RunPass(ctx context.Context) error {
 	defer a.clearCache()
 
-	qb, err := qbittorrent.New(a.cfg.QbitURL, a.cfg.QbitUsername, a.cfg.QbitPassword)
-	if err != nil {
-		return err
-	}
-
-	torrents, err := qb.TorrentsByTag(a.cfg.QbitTag, "completed")
+	torrents, err := a.qbt.TorrentsByTag(a.cfg.QbitTag, "completed")
 	if err != nil {
 		return err
 	}
 
 	for _, t := range torrents {
-		tags := strings.Split(t.Tags, ", ")
-		if slices.Contains(tags, a.cfg.QbitDoneTag) {
+		if slices.Contains(t.Tags, a.cfg.QbitDoneTag) {
 			continue
 		}
 		// The "completed" filter can include still-moving torrents; require 100%.
 		if t.Progress < 1.0 {
 			continue
 		}
-		if err := a.processTorrent(ctx, qb, t); err != nil {
+		if err := a.processTorrent(ctx, t); err != nil {
 			a.log.Error("torrent failed to process", "torrent", t.Name, "error", err)
 			continue // leave unmarked so we retry next pass
 		}
-		if err := qb.AddTag(&t, a.cfg.QbitDoneTag); err != nil {
+		if err := a.qbt.AddTag(&t, a.cfg.QbitDoneTag); err != nil {
 			a.log.Error("torrent failed to add done tag", "torrent", t.Name, "error", err)
 		}
 	}
 	return nil
 }
 
-func (a *Importer) processTorrent(ctx context.Context, qb *qbittorrent.Client, t qbittorrent.Torrent) error {
-	files, err := qb.Files(t.Hash)
+func (a *Importer) processTorrent(ctx context.Context, t qbittorrent.Torrent) error {
+	files, err := a.qbt.Files(t.Hash)
 	if err != nil {
 		return err
 	}
@@ -105,7 +100,7 @@ func (a *Importer) processTorrent(ctx context.Context, qb *qbittorrent.Client, t
 	}
 
 	if hasError {
-		if err := qb.AddTag(&t, a.cfg.QbitErrorTag); err != nil {
+		if err := a.qbt.AddTag(&t, a.cfg.QbitErrorTag); err != nil {
 			a.log.Error("torrent failed to add error tag", "torrent", t.Name, "error", err)
 		}
 	}

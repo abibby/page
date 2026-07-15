@@ -26,8 +26,28 @@ type Torrent struct {
 	State       string  `json:"state"`
 	SavePath    string  `json:"save_path"`
 	ContentPath string  `json:"content_path"`
-	Tags        string  `json:"tags"`
+	Tags        Tags    `json:"tags"`
 	Progress    float64 `json:"progress"`
+}
+
+type Tags []string
+
+var _ json.Unmarshaler = (*Tags)(nil)
+
+// UnmarshalJSON implements [json.Unmarshaler].
+func (t *Tags) UnmarshalJSON(b []byte) error {
+	if b[0] == '[' {
+		return json.Unmarshal(b, t)
+	}
+	str := ""
+	err := json.Unmarshal(b, &str)
+	if err != nil {
+		return err
+	}
+
+	*t = strings.Split(str, ", ")
+
+	return nil
 }
 
 // File is the subset of /torrents/files fields this tool needs.
@@ -152,7 +172,7 @@ func (c *Client) request(method, p string, body io.Reader, out any) error {
 
 // HasTag reports whether a torrent's comma-separated tag list contains tag.
 func (t Torrent) HasTag(tag string) bool {
-	for _, candidate := range strings.Split(t.Tags, ",") {
+	for _, candidate := range t.Tags {
 		if strings.TrimSpace(candidate) == tag {
 			return true
 		}
