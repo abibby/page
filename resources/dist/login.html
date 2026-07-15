@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login</title>
+    <script
+      src="https://unpkg.com/htmx.org@1.9.11"
+      integrity="sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <form action="{{ route "auth.login" }}" method="POST">
+      <div>
+        <label for="#username">username</label>
+        <input type="text" id="username" name="username" />
+      </div>
+      <div>
+        <label for="#password">password</label>
+        <input type="password" id="password" name="password" />
+      </div>
+      <button type="submit">Login</button>
+      <a href="{{ route "user.create" }}">create user</a>
+    </form>
+  </body>
+</html>
