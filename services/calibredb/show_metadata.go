@@ -8,8 +8,8 @@ import (
 	"github.com/abibby/page/services/opf"
 )
 
-func (i *Client) ShowMetadata(ctx context.Context, id int) (*opf.Metadata, error) {
-	b, err := i.exec(ctx, false, nil, "show_metadata", "--as-opf", strconv.Itoa(id))
+func (c *Client) ShowMetadata(ctx context.Context, id int) (*opf.Metadata, error) {
+	b, err := c.exec(ctx, false, nil, "show_metadata", "--as-opf", strconv.Itoa(id))
 	if err != nil {
 		return nil, err
 	}

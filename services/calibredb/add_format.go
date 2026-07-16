@@ -26,7 +26,7 @@ func (o *AddFormatFlags) appendArgs(args []string) []string {
 	return flags.Append(args, o)
 }
 
-func (i *Client) AddFormat(ctx context.Context, id int, ebookFile string, options *AddFormatFlags) error {
-	_, err := i.exec(ctx, true, options, "add_format", strconv.Itoa(id), ebookFile)
+func (c *Client) AddFormat(ctx context.Context, id int, ebookFile string, options *AddFormatFlags) error {
+	_, err := c.exec(ctx, true, options, "add_format", strconv.Itoa(id), ebookFile)
 	return err
 }

@@ -70,8 +70,8 @@ func (f *AddFlags) AuthorsString() string {
 	return strings.Join(f.Authors, " & ")
 }
 
-func (i *Client) Add(ctx context.Context, file string, options *AddFlags) (int, error) {
-	b, err := i.exec(ctx, true, options, "add", file)
+func (c *Client) Add(ctx context.Context, file string, options *AddFlags) (int, error) {
+	b, err := c.exec(ctx, true, options, "add", file)
 	if err != nil {
 		return 0, fmt.Errorf("calibredb.Client.Add: %w", err)
 	}

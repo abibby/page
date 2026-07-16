@@ -1,6 +1,7 @@
 package calibredb
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -8,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/abibby/salusa/clog"
 )
 
 type Client struct {
@@ -72,25 +75,37 @@ type appendArgser interface {
 	appendArgs(args []string) []string
 }
 
-func (i *Client) exec(ctx context.Context, write bool, flags appendArgser, args ...string) ([]byte, error) {
+func (c *Client) exec(ctx context.Context, write bool, flags appendArgser, args ...string) ([]byte, error) {
 	staticArgs := []string{}
-	if i.globalFlags != nil {
-		staticArgs = i.globalFlags.appendArgs(staticArgs)
+	if c.globalFlags != nil {
+		staticArgs = c.globalFlags.appendArgs(staticArgs)
 	}
 	staticArgs = append(staticArgs, args...)
 	if flags != nil && !reflect.ValueOf(flags).IsNil() {
 		staticArgs = flags.appendArgs(staticArgs)
 	}
 
-	if write && i.dryRun {
-		fmt.Printf("[dry-run] %s %s\n", i.bin, strings.Join(quoteArgs(staticArgs), " "))
+	if write && c.dryRun {
+		fmt.Printf("[dry-run] %s %s\n", c.bin, strings.Join(quoteArgs(staticArgs), " "))
 		return nil, nil
 	}
-	b, err := exec.CommandContext(ctx, i.bin, staticArgs...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, c.bin, staticArgs...)
+
+	stdout := &bytes.Buffer{}
+	cmd.Stdout = stdout
+	stderr := &bytes.Buffer{}
+	cmd.Stderr = stderr
+
+	err := cmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("calibredb command failed: %s %s: %s: %w", i.bin, strings.Join(quoteArgs(staticArgs), " "), b, err)
+		return nil, fmt.Errorf("calibredb command failed: %s %s: %s: %w", c.bin, strings.Join(quoteArgs(staticArgs), " "), stderr.Bytes(), err)
 	}
-	return b, nil
+
+	if stderr.Len() > 0 {
+		clog.Use(ctx).Warn("calibredb completed with warnings", "stderr", stderr.String())
+	}
+
+	return stdout.Bytes(), nil
 }
 
 func quoteArgs(args []string) []string {

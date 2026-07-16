@@ -1,18 +1,23 @@
 package routes
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/abibby/fileserver"
 	"github.com/abibby/page/app/handlers"
 	"github.com/abibby/page/ui"
 	"github.com/abibby/salusa/auth"
+	"github.com/abibby/salusa/clog"
 	"github.com/abibby/salusa/request"
 	"github.com/abibby/salusa/router"
 )
 
 func InitRoutes(r *router.Router) {
-	r.Use(request.HandleErrors())
+	r.Use(request.HandleErrors(func(ctx context.Context, err error) http.Handler {
+		clog.Use(ctx).Error("request failed", "error", err)
+		return nil
+	}))
 	r.Use(auth.AttachUser())
 
 	r.Group("/api", func(r *router.Router) {

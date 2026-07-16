@@ -90,8 +90,8 @@ type Book struct {
 	UUID         string            `json:"uuid"`
 }
 
-func (i *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {
-	b, err := i.exec(ctx, false, options, "list")
+func (c *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {
+	b, err := c.exec(ctx, false, options, "list")
 	if err != nil {
 		return nil, err
 	}
