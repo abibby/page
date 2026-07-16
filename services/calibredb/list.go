@@ -108,7 +108,7 @@ func (c *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {
 	}
 	err = json.Unmarshal(b[start:], &books)
 	if err != nil {
-		return nil, fmt.Errorf("calibredb.Client.List: json unmarshal: %w", err)
+		return nil, fmt.Errorf("calibredb.Client.List: json unmarshal: %s: %w", b[start:], err)
 	}
 	return books, nil
 }
