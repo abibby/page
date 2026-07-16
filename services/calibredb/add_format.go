@@ -2,6 +2,7 @@ package calibredb
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/abibby/page/services/calibredb/flags"
@@ -28,5 +29,8 @@ func (o *AddFormatFlags) appendArgs(args []string) []string {
 
 func (c *Client) AddFormat(ctx context.Context, id int, ebookFile string, options *AddFormatFlags) error {
 	_, err := c.exec(ctx, true, options, "add_format", strconv.Itoa(id), ebookFile)
-	return err
+	if err != nil {
+		return fmt.Errorf("calibredb.Client.AddFormat: %w", err)
+	}
+	return nil
 }

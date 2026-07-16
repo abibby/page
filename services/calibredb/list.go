@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -96,7 +97,7 @@ type Book struct {
 func (c *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {
 	b, err := c.exec(ctx, false, options, "list")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("calibredb.Client.List: %w", err)
 	}
 
 	books := []Book{}
@@ -107,7 +108,7 @@ func (c *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {
 	}
 	err = json.Unmarshal(b[start:], &books)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("calibredb.Client.List: json unmarshal: %w", err)
 	}
 	return books, nil
 }
