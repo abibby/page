@@ -34,7 +34,8 @@ var Kernel = kernel.New(
 	),
 	kernel.Services(
 		cron.Service().
-			Schedule("*/5 * * * *", &events.ImportEvent{}),
+			// Schedule("*/5 * * * *", &events.ImportEvent{}).
+			Schedule("* * * * *", &events.ImportEvent{}),
 		event.Service(
 			event.NewListener[*jobs.ImportJob](),
 		),

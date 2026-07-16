@@ -9,8 +9,8 @@ import (
 	"github.com/abibby/page/services/calibredb"
 	"github.com/abibby/page/services/hardcover"
 	"github.com/abibby/page/services/importer"
-	"github.com/abibby/page/services/qbittorrent"
 	"github.com/abibby/salusa/di"
+	"github.com/autobrr/go-qbittorrent"
 	"github.com/webtor-io/go-jackett"
 )
 
@@ -33,7 +33,11 @@ func Register(ctx context.Context) error {
 		}), nil
 	})
 	di.RegisterLazySingletonWith(ctx, func(cfg *config.Config) (*qbittorrent.Client, error) {
-		return qbittorrent.New(cfg.QbitURL, cfg.QbitUsername, cfg.QbitPassword)
+		return qbittorrent.NewClient(qbittorrent.Config{
+			Host:     cfg.QbitURL,
+			Username: cfg.QbitUsername,
+			Password: cfg.QbitPassword,
+		}), nil
 	})
 
 	type calibreWith struct {

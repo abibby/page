@@ -21,7 +21,9 @@ func InitRoutes(r *router.Router) {
 		r.Post("/book", handlers.BookImport).Name("book.import")
 
 		r.Get("/torrent/search", handlers.TorrentSearch).Name("torrent.search")
-		r.Get("/torrent/active", handlers.TorrentActive).Name("hardcover.active")
+		r.Get("/torrent/active", handlers.TorrentActive).Name("torrent.active")
+		r.Post("/torrent", handlers.TorrentAdd).Name("torrent.add")
+
 		r.Get("/hardcover/search", handlers.HardcoverSearch).Name("hardcover.search")
 
 		r.Handle("/d", http.StripPrefix("/api/d", handlers.CalibreData)).Name("data")

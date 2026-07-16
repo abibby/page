@@ -1,26 +1,34 @@
 import {
   useCallback,
+  useMemo,
   useRef,
   useState,
+  type ChangeEventHandler,
+  type InputEventHandler,
   type PropsWithChildren,
   type SubmitEventHandler,
 } from "react";
 import { useAsync } from "../hooks/use-async";
 import {
   hardcoverSearch,
+  torrentAdd,
   torrentSearch,
   type Book,
   type HardcoverBook,
   type Torrent,
 } from "../api/api";
 import styles from "./search.module.css";
+import { useActiveTorrents } from "../hooks/use-active-torrents";
+import { useQueryString } from "../hooks/use-query-string";
 
 export function Search() {
   const hardcoverSearchRef = useRef<HTMLInputElement | null>(null);
   const torrentSearchRef = useRef<HTMLInputElement | null>(null);
-  const [hardcoverSearch, setHardcoverSearch] = useState("");
+
+  const [hardcoverSearch, setHardcoverSearch] = useQueryString("book");
+  const [torrentSearch, setTorrentSearch] = useQueryString("torrent");
+
   const [hardcoverBook, setHardcoverBook] = useState<HardcoverBook>();
-  const [torrentSearch, setTorrentSearch] = useState("");
   const [torrent, setTorrent] = useState<Torrent>();
 
   const searchHardcoverSubmit = useCallback<
@@ -31,11 +39,13 @@ export function Search() {
     setHardcoverBook(undefined);
     setTorrent(undefined);
   }, []);
+
   const searchTorrentSubmit = useCallback<SubmitEventHandler<HTMLFormElement>>(
     (e) => {
       e.preventDefault();
       setTorrentSearch(torrentSearchRef.current?.value ?? "");
       setTorrent(undefined);
+      setHardcoverSearch("");
     },
     [],
   );
@@ -45,8 +55,14 @@ export function Search() {
     setTimeout(() => {
       if (torrentSearchRef.current) {
         torrentSearchRef.current.value = b.title + " " + hardcoverAuthor(b);
+        setTorrentSearch(torrentSearchRef.current.value);
       }
     }, 1);
+  }, []);
+
+  const selectTorrent = useCallback(async (torrent: Torrent) => {
+    setTorrent(torrent);
+    await torrentAdd({ url: torrent.magnet_uri });
   }, []);
 
   return (
@@ -56,6 +72,7 @@ export function Search() {
           ref={hardcoverSearchRef}
           type="text"
           placeholder="Search new books"
+          defaultValue={hardcoverSearch}
         />
         <button>Search</button>
       </form>
@@ -74,17 +91,16 @@ export function Search() {
           ref={torrentSearchRef}
           type="text"
           placeholder="Search torrents"
+          defaultValue={torrentSearch}
         />
         <button>Search</button>
       </form>
 
       {!torrent ? (
-        <TorrentSearch search={torrentSearch} onSelectTorrent={setTorrent} />
+        <TorrentSearch search={torrentSearch} onSelectTorrent={selectTorrent} />
       ) : (
         <TorrentInfo torrent={torrent} />
       )}
-
-      <pre>{JSON.stringify(torrent, undefined, "    ")}</pre>
     </section>
   );
 }
@@ -178,7 +194,6 @@ function TorrentSearch(params: TorrentSearchParams) {
   const torrents = useAsync(
     useCallback(
       async (s: AbortSignal) => {
-        console.log(params.search);
         if (params.search === "") {
           return [];
         }
@@ -190,6 +205,24 @@ function TorrentSearch(params: TorrentSearchParams) {
       [params.search],
     ),
   );
+
+  const [seedSort, setSeedSort] = useState(false);
+
+  const seedSortInput = useCallback<ChangeEventHandler<HTMLInputElement>>(
+    (e) => {
+      setSeedSort(e.currentTarget.checked);
+    },
+    [],
+  );
+
+  const sortedList = useMemo(() => {
+    if (seedSort) {
+      return Array.from(torrents.value ?? []).sort(
+        (a, b) => (b.seeders ?? 0) - (a.seeders ?? 0),
+      );
+    }
+    return torrents.value ?? [];
+  }, [torrents.value, seedSort]);
 
   if (torrents.loading) {
     return <div>Loading...</div>;
@@ -204,20 +237,24 @@ function TorrentSearch(params: TorrentSearchParams) {
   }
 
   return (
-    <ul className={styles.torrentList}>
-      <div className={`${styles.torrent} ${styles.torrentHeader}`}>
-        <div>Title</div>
-        <div>Size</div>
-        <div>Seeders</div>
-        <div>Peers</div>
-        <div>Tracker</div>
-      </div>
-      {torrents.value.map((t) => (
-        <li key={t.id} onClick={() => params.onSelectTorrent(t)}>
-          <TorrentInfo torrent={t} />
+    <section>
+      <input type="checkbox" checked={seedSort} onChange={seedSortInput} />
+      <ul className={styles.torrentList}>
+        <li>
+          <div className={`${styles.torrent} ${styles.torrentHeader}`}>
+            <div className={styles.title}>Title</div>
+            <div className={styles.size}>Size</div>
+            <div className={styles.peers}>Peers</div>
+            <div className={styles.tracker}>Tracker</div>
+          </div>
         </li>
-      ))}
-    </ul>
+        {sortedList.map((t) => (
+          <li key={t.id} onClick={() => params.onSelectTorrent(t)}>
+            <TorrentInfo torrent={t} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -226,15 +263,38 @@ type TorrentInfoProps = {
 };
 
 function TorrentInfo(props: TorrentInfoProps) {
+  const activeTorrents = useActiveTorrents();
+  const activeTorrent = useMemo(() => {
+    return activeTorrents.find(
+      (t) => t.hash.toLowerCase() == props.torrent.info_hash?.toLowerCase(),
+    );
+  }, [activeTorrents, props.torrent.info_hash]);
   return (
-    <div className={styles.torrent}>
-      <div>{props.torrent.title}</div>
-      <div>{formatBytes(props.torrent.size)}</div>
-      <div>{props.torrent.seeders}</div>
-      <div>{props.torrent.peers}</div>
-      <div>{props.torrent.tracker}</div>
+    <div className={`${styles.torrent} ${activeTorrent && styles.active}`}>
+      <div className={styles.title}>{props.torrent.title}</div>
+      <div className={styles.size}>{formatBytes(props.torrent.size)}</div>
+      <div className={styles.peers}>
+        <span className={pillStyle(props.torrent.seeders ?? 0)}>
+          {props.torrent.seeders ?? 0} / {props.torrent.peers ?? 0}
+        </span>
+      </div>
+      <div className={styles.tracker}>{props.torrent.tracker}</div>
+      <div className={styles.downloading}>
+        {activeTorrent && activeTorrent.state}
+      </div>
     </div>
   );
+}
+
+function pillStyle(seeders: number): string {
+  let className = styles.pill + " ";
+  if (seeders >= 15) {
+    return className + styles.good;
+  }
+  if (seeders > 0) {
+    return className + styles.ok;
+  }
+  return className + styles.bad;
 }
 
 function formatBytes(bytes: number, decimals = 2) {
