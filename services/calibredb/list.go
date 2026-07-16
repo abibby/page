@@ -1,11 +1,14 @@
 package calibredb
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/abibby/page/services/calibredb/flags"
+	"github.com/abibby/salusa/clog"
 )
 
 type Field string
@@ -98,7 +101,11 @@ func (c *Client) List(ctx context.Context, options *ListFlags) ([]Book, error) {
 
 	books := []Book{}
 
-	err = json.Unmarshal(b, &books)
+	start := bytes.Index(b, []byte("["))
+	if start > 0 {
+		clog.Use(ctx).Warn("calibredb list warning", "warnings", strings.TrimSpace(string(b[:start])))
+	}
+	err = json.Unmarshal(b[start:], &books)
 	if err != nil {
 		return nil, err
 	}

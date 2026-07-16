@@ -1,7 +1,6 @@
 package calibredb
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -9,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/abibby/salusa/clog"
 )
 
 type Client struct {
@@ -89,23 +86,12 @@ func (c *Client) exec(ctx context.Context, write bool, flags appendArgser, args 
 		fmt.Printf("[dry-run] %s %s\n", c.bin, strings.Join(quoteArgs(staticArgs), " "))
 		return nil, nil
 	}
-	cmd := exec.CommandContext(ctx, c.bin, staticArgs...)
-
-	stdout := &bytes.Buffer{}
-	cmd.Stdout = stdout
-	stderr := &bytes.Buffer{}
-	cmd.Stderr = stderr
-
-	err := cmd.Run()
+	b, err := exec.CommandContext(ctx, c.bin, staticArgs...).Output()
 	if err != nil {
-		return nil, fmt.Errorf("calibredb command failed: %s %s: %s: %w", c.bin, strings.Join(quoteArgs(staticArgs), " "), stderr.Bytes(), err)
+		return nil, fmt.Errorf("calibredb command failed: %s: %s: %w", c.bin, strings.Join(quoteArgs(staticArgs), " "), err)
 	}
 
-	if stderr.Len() > 0 {
-		clog.Use(ctx).Warn("calibredb completed with warnings", "stderr", stderr.String())
-	}
-
-	return stdout.Bytes(), nil
+	return b, nil
 }
 
 func quoteArgs(args []string) []string {
