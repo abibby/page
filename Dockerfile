@@ -1,16 +1,28 @@
 # syntax=docker/dockerfile:1
 
-# --- Stage 1: build a static Go binary --------------------------------------
+# --- Stage 1: build the UI bundle -------------------------------------------
+FROM node:22-bookworm-slim AS ui
+WORKDIR /ui
+# Install deps first so this layer caches unless the lockfile changes.
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui/ ./
+# Produces /ui/dist, which the Go binary embeds via //go:embed dist/*.
+RUN npm run build
+
+# --- Stage 2: build a static Go binary --------------------------------------
 FROM golang:1.26-bookworm AS build
 
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
+# Pull in the compiled UI so //go:embed dist/* has files to embed.
+COPY --from=ui /ui/dist ./ui/dist
 # CGO disabled -> fully static binary that runs on the slim runtime image.
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/page .
 
-# --- Stage 2: runtime with calibredb ----------------------------------------
+# --- Stage 3: runtime with calibredb ----------------------------------------
 FROM debian:bookworm-slim
 
 # Runtime libraries Calibre's bundled Qt needs to load, even for the CLI tools.

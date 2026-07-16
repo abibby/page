@@ -1,0 +1,10 @@
+# Build artifacts and deps are rebuilt inside the image.
+ui/node_modules
+ui/dist
+node_modules
+
+# VCS and local cruft.
+.git
+.gitignore
+*.log
+.DS_Store

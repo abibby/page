@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type ChangeEventHandler,
-  type InputEventHandler,
   type PropsWithChildren,
   type SubmitEventHandler,
 } from "react";
