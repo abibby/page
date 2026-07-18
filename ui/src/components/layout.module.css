@@ -1,0 +1,17 @@
+:root {
+    margin-top: 1.5rem;
+}
+
+.nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    gap: 1rem;
+    z-index: 9;
+    background-color: lightgrey;
+    padding: 0.25rem;
+    line-height: 1;
+    font-size: 1rem;
+}

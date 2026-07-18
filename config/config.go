@@ -72,7 +72,7 @@ func Load() *Config {
 	}
 
 	c := &Config{
-		Port:     env.Int("PORT", 2303),
+		Port:     env.Int("PORT", 8010),
 		BasePath: env.String("BASE_PATH", ""),
 		Database: sqlite.NewConfig(env.String("DATABASE_PATH", "./db.sqlite")),
 		Queue:    event.NewChannelQueueConfig(),

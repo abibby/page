@@ -48,6 +48,17 @@ func (i *Importer) AddBook(ctx context.Context, file string, isAudiobook bool, b
 	return i.addEbook(ctx, file, book)
 }
 
+func (i *Importer) AddEmptyBook(ctx context.Context, book *hardcover.Book) (int, error) {
+	flags, cleanup := hardcoverBookToAddFlags(ctx, book)
+	defer cleanup()
+	flags.Empty = true
+	id, err := i.client.Add(ctx, "", flags)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create book: %w", err)
+	}
+	return id, nil
+}
+
 func hardcoverBookToAddFlags(ctx context.Context, book *hardcover.Book) (*calibredb.AddFlags, func()) {
 	coverPath := ""
 	if book.CoverURL != "" {
@@ -89,19 +100,15 @@ func (i *Importer) addAudiobook(ctx context.Context, file string, book *hardcove
 
 	existingBook, ok := i.getExistingID(ctx, book)
 	if !ok {
-
-		flags, cleanup := hardcoverBookToAddFlags(ctx, book)
-		defer cleanup()
-		flags.Empty = true
-		id, err := i.client.Add(ctx, "", flags)
+		id, err := i.AddEmptyBook(ctx, book)
 		if err != nil {
-			return fmt.Errorf("failed to create book: %w", err)
+			return err
 		}
 
 		existingBook = &calibredb.Book{
 			ID:      id,
-			Title:   flags.Title,
-			Authors: flags.AuthorsString(),
+			Title:   book.Title,
+			Authors: strings.Join(book.Authors, " & "),
 		}
 	}
 

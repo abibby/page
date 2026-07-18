@@ -18,8 +18,13 @@ export type Book = {
   uuid: string;
 };
 
+export type FullBook = Book & {
+  description: string;
+  files: string[];
+};
+
 export type HardcoverBook = {
-  id: number;
+  id: string | number;
   title: string;
   image: { url: string };
   contributions: Contribution[];
@@ -166,6 +171,17 @@ export async function bookList(r: BookListRequest): Promise<Book[]> {
   }).then((r) => r.json());
 }
 
+export type BookViewRequest = BaseRequest & {};
+
+export async function bookView(
+  id: number,
+  r: BookViewRequest = {},
+): Promise<FullBook> {
+  return fetch(`/api/book/${id}`, {
+    signal: r.signal,
+  }).then((r) => r.json());
+}
+
 export type BookImportRequest = BaseRequest & {
   file: File;
   hardcover_id?: Number;
@@ -177,9 +193,24 @@ export async function bookImport(r: BookImportRequest): Promise<Book[]> {
   if (r.hardcover_id) {
     data.append("hardcover_id", String(r.hardcover_id));
   }
-  return fetch("/api/book", {
+  return fetch("/api/book/import", {
     method: "POST",
     body: data,
+  }).then((r) => r.json());
+}
+
+export type BookAddRequest = {
+  title: string;
+  authors: string[];
+  hardcover_id: number;
+};
+export type BookAddResponse = {
+  book_id: number;
+};
+export async function bookAdd(r: BookAddRequest): Promise<BookAddResponse> {
+  return fetch("/api/book", {
+    method: "POST",
+    body: JSON.stringify(r),
   }).then((r) => r.json());
 }
 

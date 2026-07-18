@@ -3,10 +3,7 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
 export default defineConfig(({ mode }): UserConfig => {
-  const env = {
-    ...process.env,
-    ...loadEnv(mode, resolve(__dirname, "..")),
-  };
+  const env =  loadEnv(mode, resolve(__dirname, ".."), ["PAGE", "VITE"]);
 
   return {
     plugins: [react()],

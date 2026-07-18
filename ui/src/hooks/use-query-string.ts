@@ -48,8 +48,6 @@ export function useQueryString(
           url.searchParams.set(key, resolvedValue);
         }
 
-        console.log(url.toString());
-
         // Use replaceState to avoid cluttering the browser history stack
         window.history.replaceState({}, "", url.toString());
       }

@@ -92,6 +92,18 @@ type apiEdition struct {
 	Book   RawBook `json:"book"`
 }
 
+const bookParams = `
+	id
+	title
+	release_year
+	contributions { author { name } }
+	featured_series: featured_book_series {
+		position
+		series { name }
+	}
+	image { url }
+`
+
 // LookupByISBN finds the edition matching an ISBN-13 or ISBN-10 and returns its
 // parent book's metadata. Returns (nil, nil) when no edition matches.
 func (c *Client) LookupByISBN(ctx context.Context, isbn string) (*Book, error) {
@@ -100,17 +112,7 @@ func (c *Client) LookupByISBN(ctx context.Context, isbn string) (*Book, error) {
     title
     isbn_13
     isbn_10
-    book {
-		id
-		title
-		release_year
-		contributions { author { name } }
-		book_series {
-			position
-			series { name }
-		}
-		image { url }
-  	}
+    book {` + bookParams + `}
   }
 }`
 
@@ -216,6 +218,25 @@ func (c *Client) Query(ctx context.Context, q string) ([]RawBook, error) {
 	}
 
 	return docs, nil
+}
+
+func (c *Client) GetBook(ctx context.Context, id int) (*Book, error) {
+	query := `query ($id: Int!) {
+  		books(where: {id: {_eq: $id}}) {` + bookParams + `}
+	}`
+
+	var resp struct {
+		Books []RawBook `json:"books"`
+	}
+	if err := c.do(ctx, query, map[string]any{"id": id}, &resp); err != nil {
+		return nil, err
+	}
+	if len(resp.Books) == 0 {
+		return nil, ErrNotFound
+	}
+
+	book := bookFromAPI(resp.Books[0])
+	return &book, nil
 }
 
 func bookFromAPI(b RawBook) Book {

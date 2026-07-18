@@ -23,7 +23,8 @@ func InitRoutes(r *router.Router) {
 	r.Group("/api", func(r *router.Router) {
 		r.Get("/book", handlers.BookList).Name("book.list")
 		r.Get("/book/{id}", handlers.BookView).Name("book.view")
-		r.Post("/book", handlers.BookImport).Name("book.import")
+		r.Post("/book/import", handlers.BookImport).Name("book.import")
+		r.Post("/book", handlers.BookAdd).Name("book.add")
 
 		r.Get("/torrent/search", handlers.TorrentSearch).Name("torrent.search")
 		r.Get("/torrent/active", handlers.TorrentActive).Name("torrent.active")

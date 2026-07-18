@@ -1,16 +1,13 @@
 import {
   useCallback,
   useMemo,
-  useRef,
   useState,
   type ChangeEventHandler,
   type PropsWithChildren,
-  type SubmitEventHandler,
 } from "react";
 import { useAsync } from "../hooks/use-async";
 import {
   hardcoverSearch,
-  torrentAdd,
   torrentSearch,
   type Book,
   type HardcoverBook,
@@ -18,98 +15,13 @@ import {
 } from "../api/api";
 import styles from "./search.module.css";
 import { useActiveTorrents } from "../hooks/use-active-torrents";
-import { useQueryString } from "../hooks/use-query-string";
 
-export function Search() {
-  const hardcoverSearchRef = useRef<HTMLInputElement | null>(null);
-  const torrentSearchRef = useRef<HTMLInputElement | null>(null);
-
-  const [hardcoverSearch, setHardcoverSearch] = useQueryString("book");
-  const [torrentSearch, setTorrentSearch] = useQueryString("torrent");
-
-  const [hardcoverBook, setHardcoverBook] = useState<HardcoverBook>();
-  const [torrent, setTorrent] = useState<Torrent>();
-
-  const searchHardcoverSubmit = useCallback<
-    SubmitEventHandler<HTMLFormElement>
-  >((e) => {
-    e.preventDefault();
-    setHardcoverSearch(hardcoverSearchRef.current?.value ?? "");
-    setHardcoverBook(undefined);
-    setTorrent(undefined);
-  }, []);
-
-  const searchTorrentSubmit = useCallback<SubmitEventHandler<HTMLFormElement>>(
-    (e) => {
-      e.preventDefault();
-      setTorrentSearch(torrentSearchRef.current?.value ?? "");
-      setTorrent(undefined);
-      setHardcoverSearch("");
-    },
-    [],
-  );
-
-  const selectHardcoverBook = useCallback((b: HardcoverBook) => {
-    setHardcoverBook(b);
-    setTimeout(() => {
-      if (torrentSearchRef.current) {
-        torrentSearchRef.current.value = b.title + " " + hardcoverAuthor(b);
-        setTorrentSearch(torrentSearchRef.current.value);
-      }
-    }, 1);
-  }, []);
-
-  const selectTorrent = useCallback(async (torrent: Torrent) => {
-    setTorrent(torrent);
-    await torrentAdd({ url: torrent.magnet_uri });
-  }, []);
-
-  return (
-    <section>
-      <form onSubmit={searchHardcoverSubmit}>
-        <input
-          ref={hardcoverSearchRef}
-          type="text"
-          placeholder="Search new books"
-          defaultValue={hardcoverSearch}
-        />
-        <button>Search</button>
-      </form>
-
-      {!hardcoverBook ? (
-        <BookSearch
-          search={hardcoverSearch}
-          onSelectBook={selectHardcoverBook}
-        />
-      ) : (
-        <HardcoverBook book={hardcoverBook} />
-      )}
-
-      <form onSubmit={searchTorrentSubmit}>
-        <input
-          ref={torrentSearchRef}
-          type="text"
-          placeholder="Search torrents"
-          defaultValue={torrentSearch}
-        />
-        <button>Search</button>
-      </form>
-
-      {!torrent ? (
-        <TorrentSearch search={torrentSearch} onSelectTorrent={selectTorrent} />
-      ) : (
-        <TorrentInfo torrent={torrent} />
-      )}
-    </section>
-  );
-}
-
-type BookSearchParams = {
+export type BookSearchParams = {
   search: string;
   onSelectBook: (b: HardcoverBook) => void;
 };
 
-function BookSearch(params: BookSearchParams) {
+export function BookSearch(params: BookSearchParams) {
   const books = useAsync(
     useCallback(
       async (s: AbortSignal) => {
@@ -184,12 +96,12 @@ function hardcoverAuthor(book: HardcoverBook): string {
     .join(" & ");
 }
 
-type TorrentSearchParams = {
+export type TorrentSearchParams = {
   search: string;
   onSelectTorrent: (b: Torrent) => void;
 };
 
-function TorrentSearch(params: TorrentSearchParams) {
+export function TorrentSearch(params: TorrentSearchParams) {
   const torrents = useAsync(
     useCallback(
       async (s: AbortSignal) => {
@@ -237,7 +149,10 @@ function TorrentSearch(params: TorrentSearchParams) {
 
   return (
     <section>
-      <input type="checkbox" checked={seedSort} onChange={seedSortInput} />
+      <label>
+        sort by seeds
+        <input type="checkbox" checked={seedSort} onChange={seedSortInput} />
+      </label>
       <ul className={styles.torrentList}>
         <li>
           <div className={`${styles.torrent} ${styles.torrentHeader}`}>
@@ -279,7 +194,16 @@ function TorrentInfo(props: TorrentInfoProps) {
       </div>
       <div className={styles.tracker}>{props.torrent.tracker}</div>
       <div className={styles.downloading}>
-        {activeTorrent && activeTorrent.state}
+        {activeTorrent && (
+          <>
+            {activeTorrent.state}{" "}
+            {(
+              Math.min(1, activeTorrent.downloaded / activeTorrent.total_size) *
+              100
+            ).toFixed(0)}
+            %
+          </>
+        )}
       </div>
     </div>
   );

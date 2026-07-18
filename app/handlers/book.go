@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/http"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/abibby/page/config"
+	"github.com/abibby/page/services/calibre"
 	"github.com/abibby/page/services/calibredb"
+	"github.com/abibby/page/services/hardcover"
 	"github.com/abibby/page/services/importer"
 	"github.com/abibby/salusa/request"
 )
@@ -18,7 +20,8 @@ import (
 type FullBook struct {
 	calibredb.Book
 
-	Description string `json:"description"`
+	Description string   `json:"description"`
+	Files       []string `json:"files"`
 }
 
 type BookListRequest struct {
@@ -80,11 +83,20 @@ var BookView = request.Handler(func(r *BookViewRequest) (*FullBook, error) {
 		return nil, err
 	}
 
+	files, err := os.ReadDir(path.Dir(b.Cover))
+	if err != nil {
+		return nil, err
+	}
+	fileNames := make([]string, len(files))
+	for i, f := range files {
+		fileNames[i] = f.Name()
+	}
 	cleanBook(r.Cfg, &b)
 
 	return &FullBook{
 		Book:        b,
 		Description: meta.Description,
+		Files:       fileNames,
 	}, nil
 })
 
@@ -92,9 +104,8 @@ type BookImportRequest struct {
 	HardcoverID int     `json:"hardcover_id"`
 	File        fs.File `json:"file"`
 
-	Request *http.Request      `inject:""`
-	Ctx     context.Context    `inject:""`
-	App     *importer.Importer `inject:""`
+	Ctx context.Context    `inject:""`
+	App *importer.Importer `inject:""`
 }
 
 var BookImport = request.Handler(func(r *BookImportRequest) (any, error) {
@@ -124,6 +135,35 @@ var BookImport = request.Handler(func(r *BookImportRequest) (any, error) {
 	}
 
 	return nil, nil
+})
+
+type BookAddRequest struct {
+	HardcoverID int `json:"hardcover_id"`
+
+	Ctx       context.Context   `inject:""`
+	Hardcover *hardcover.Client `inject:""`
+	Calibre   *calibre.Importer `inject:""`
+}
+
+type BookAddResponse struct {
+	BookID int `json:"book_id"`
+}
+
+var BookAdd = request.Handler(func(r *BookAddRequest) (*BookAddResponse, error) {
+	book, err := r.Hardcover.GetBook(r.Ctx, r.HardcoverID)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := r.Calibre.AddEmptyBook(r.Ctx, book)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BookAddResponse{
+		BookID: id,
+	}, nil
+
 })
 
 func cleanBook(cfg *config.Config, book *calibredb.Book) {
