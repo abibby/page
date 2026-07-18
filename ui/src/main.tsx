@@ -1,9 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./main.css";
-import { createBrowserRouter, Link } from "react-router";
+import { createBrowserRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
-import { buildRoutes, routePath } from "./routes.ts";
+import { buildRoutes } from "./routes.ts";
 import { ModalProvider } from "./components/modal.tsx";
 
 const router = createBrowserRouter(buildRoutes());

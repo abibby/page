@@ -23,6 +23,10 @@ export function BookView() {
     [],
   );
   const selectTorrent = useCallback(async (torrent: Torrent) => {
+    if (!torrent.magnet_uri) {
+      alert("This torrent has no magnet link");
+      return;
+    }
     await torrentAdd({ url: torrent.magnet_uri });
   }, []);
 

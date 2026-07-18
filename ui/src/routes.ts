@@ -8,7 +8,7 @@ import { Home } from "./pages/home";
 import type React from "react";
 import { Search } from "./pages/search";
 import { BookView } from "./pages/book";
-import { bookList, bookView } from "./api/api";
+import { bookView } from "./api/api";
 
 const routes = {
   home: {
