@@ -286,7 +286,7 @@ func (c *Client) do(ctx context.Context, query string, vars map[string]any, out 
 	if err != nil {
 		return fmt.Errorf("hardcover request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("hardcover request: status %d", resp.StatusCode)
 	}

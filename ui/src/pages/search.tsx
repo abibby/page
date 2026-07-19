@@ -18,20 +18,23 @@ export function Search() {
   const queryDebounce = useDebounce(query);
   const queryInputChange = useUpdateCallback(setQuery);
 
-  const selectBook = useCallback(async (book: HardcoverBook) => {
-    const addBook = await modals.openModal(Prompt, { message: book.title });
-    if (!addBook) {
-      return;
-    }
-    const resp = await bookAdd({
-      title: book.title,
-      authors: book.contributions
-        .map((c) => c.author?.name)
-        .filter((n) => n !== undefined),
-      hardcover_id: Number(book.id),
-    });
-    navigate(routePath("book.view", { bookId: resp.book_id }));
-  }, []);
+  const selectBook = useCallback(
+    async (book: HardcoverBook) => {
+      const addBook = await modals.openModal(Prompt, { message: book.title });
+      if (!addBook) {
+        return;
+      }
+      const resp = await bookAdd({
+        title: book.title,
+        authors: book.contributions
+          .map((c) => c.author?.name)
+          .filter((n) => n !== undefined),
+        hardcover_id: Number(book.id),
+      });
+      navigate(routePath("book.view", { bookId: resp.book_id }));
+    },
+    [navigate, modals],
+  );
 
   return (
     <Layout>

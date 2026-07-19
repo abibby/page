@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState, type ChangeEventHandler } from "react";
 import { useDebounce } from "../hooks/use-debounce";
 import { useUpdateCallback } from "../hooks/use-update-callback";
 import { torrentAdd, type Torrent } from "../api/api";
+import { UploadButton } from "../components/upload-button";
 
 export function BookView() {
   const data = useRouteLoaderData<"book.view">();
@@ -33,7 +34,7 @@ export function BookView() {
   const groupedFiles = useMemo(() => {
     const m = new Map<string, string[]>();
     for (const f of b.files) {
-      const ext = f.match(/\.[^\.]+$/)?.[0] ?? "";
+      const ext = f.match(/\.[^.]+$/)?.[0] ?? "";
       let arr = m.get(ext);
       if (!arr) {
         arr = [];
@@ -50,11 +51,15 @@ export function BookView() {
 
   return (
     <Layout>
+      <UploadButton bookId={b.id} />
       <Book title={b.title} author={b.authors} coverURL={b.cover} />
 
-      {b.description.split("\n").map((line) => (
-        <p key={line}>{line}</p>
-      ))}
+      {b.description
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => (
+          <p key={line}>{line}</p>
+        ))}
 
       <h3>Files</h3>
       <ul>

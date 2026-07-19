@@ -1,5 +1,5 @@
 import { useSignals } from "@preact/signals-react/runtime";
-import { torrentActive, torrentEvents, type ActiveTorrent } from "../api/api";
+import { torrentActive, updateEvents, type ActiveTorrent } from "../api/api";
 import { signal } from "@preact/signals-react";
 import { useEffect } from "react";
 let activeTorrents = signal<ActiveTorrent[]>([]);
@@ -7,19 +7,20 @@ let activeTorrents = signal<ActiveTorrent[]>([]);
 let numActive = 0;
 
 async function updateActiveTorrents() {
+  if (numActive == 0) {
+    return;
+  }
   const torrents = await torrentActive();
   activeTorrents.value = torrents;
 }
 
-torrentEvents.addEventListener("add", () => {
+updateEvents.addEventListener("torrent", () => {
   updateActiveTorrents();
 });
 updateActiveTorrents();
 
 setInterval(() => {
-  if (numActive > 0) {
-    updateActiveTorrents();
-  }
+  updateActiveTorrents();
 }, 10_000);
 
 export function useActiveTorrents(): ActiveTorrent[] {

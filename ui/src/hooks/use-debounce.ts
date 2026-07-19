@@ -13,6 +13,6 @@ export function useDebounce<T>(v: T, timeoutMs = 500): T {
     return () => {
       unmounted = true;
     };
-  }, [v]);
+  }, [v, timeoutMs]);
   return slow;
 }

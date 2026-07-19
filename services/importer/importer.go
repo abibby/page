@@ -92,7 +92,7 @@ func (a *Importer) processTorrent(ctx context.Context, t qbittorrent.Torrent) er
 			hasError = true
 			continue
 		}
-		if err := a.ImportFile(ctx, hostPath); err != nil {
+		if _, err := a.ImportFile(ctx, hostPath); err != nil {
 			a.log.Warn("failed to import file", "file", filepath.Base(hostPath), "error", err)
 			hasError = true
 			continue
@@ -125,10 +125,10 @@ func (a *Importer) findBook(ctx context.Context, path string) (*hardcover.Book, 
 	return b, &meta, nil
 }
 
-func (a *Importer) ImportFile(ctx context.Context, path string) error {
+func (a *Importer) ImportFile(ctx context.Context, path string) (int, error) {
 	book, meta, err := a.findBook(ctx, path)
 	if err != nil {
-		return fmt.Errorf("metadata extract failed: %w", err)
+		return 0, fmt.Errorf("metadata extract failed: %w", err)
 	}
 
 	label := meta.Title
@@ -138,12 +138,12 @@ func (a *Importer) ImportFile(ctx context.Context, path string) error {
 	if label == "" {
 		label = filepath.Base(path)
 	}
-
-	if err := a.calibre.AddBook(ctx, path, meta.IsAudiobook, book); err != nil {
-		return err
+	id, err := a.calibre.AddBook(ctx, path, meta.IsAudiobook, book)
+	if err != nil {
+		return 0, err
 	}
 	a.log.Info("imported book", "title", label, "isbn", meta.ISBN)
-	return nil
+	return id, nil
 }
 
 // lookup enriches metadata via Hardcover: by ISBN first, then a title/author

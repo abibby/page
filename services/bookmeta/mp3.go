@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +17,7 @@ func extractAudio(path string) (Meta, error) {
 	if err != nil {
 		return Meta{}, fmt.Errorf("extractAudio: open file: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	m, err := tag.ReadFrom(f)
 	if err != nil {
 		return Meta{}, fmt.Errorf("extractAudio: read tags: %w", err)
@@ -32,9 +31,6 @@ func extractAudio(path string) (Meta, error) {
 	meta.IsAudiobook = true
 
 	return meta, nil
-}
-func fileNameWithoutExtension(fileName string) string {
-	return fileName[:len(fileName)-len(filepath.Ext(fileName))]
 }
 
 var cache = map[string]Meta{}

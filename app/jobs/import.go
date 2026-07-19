@@ -15,6 +15,5 @@ type ImportJob struct {
 
 func (l *ImportJob) Handle(ctx context.Context, e *events.ImportEvent) error {
 	l.Log.Info("starting import pass")
-	l.Importer.RunPass(ctx)
-	return nil
+	return l.Importer.RunPass(ctx)
 }

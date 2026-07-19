@@ -50,7 +50,7 @@ func appendTag(args []string, tag *tagProps, v reflect.Value) []string {
 		return args
 	}
 
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		return appendTag(args, tag, v.Elem())
 	}
 
@@ -63,10 +63,10 @@ func appendTag(args []string, tag *tagProps, v reflect.Value) []string {
 		}
 		if joiner, ok := tag.args["join"]; ok {
 			var b strings.Builder
-			b.WriteString(fmt.Sprint(v.Index(0).Interface()))
+			fmt.Fprint(&b, v.Index(0).Interface())
 			for i := 1; i < v.Len(); i++ {
 				b.WriteString(joiner)
-				b.WriteString(fmt.Sprint(v.Index(i).Interface()))
+				fmt.Fprint(&b, v.Index(i).Interface())
 			}
 
 			return append(args, tag.name, b.String())

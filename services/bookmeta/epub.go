@@ -31,7 +31,7 @@ func extractEPUB(path string) (Meta, error) {
 	if err != nil {
 		return Meta{}, fmt.Errorf("open epub: %w", err)
 	}
-	defer r.Close()
+	defer r.Close() //nolint:errcheck
 
 	opfPath, err := opfPathFromContainer(r)
 	if err != nil {
@@ -72,7 +72,7 @@ func opfPathFromContainer(r *zip.ReadCloser) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		defer rc.Close()
+		defer rc.Close() //nolint:errcheck
 		var c containerXML
 		if err := xml.NewDecoder(rc).Decode(&c); err != nil {
 			return "", fmt.Errorf("parse container.xml: %w", err)
@@ -93,7 +93,7 @@ func readOPF(r *zip.ReadCloser, opfPath string) (opfPackage, error) {
 		if err != nil {
 			return opfPackage{}, err
 		}
-		defer rc.Close()
+		defer rc.Close() //nolint:errcheck
 		data, err := io.ReadAll(rc)
 		if err != nil {
 			return opfPackage{}, err

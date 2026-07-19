@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components
 import React, {
   createContext,
   useCallback,
@@ -6,7 +7,7 @@ import React, {
   useState,
   type PropsWithChildren,
 } from "react";
-import styles from './modal.module.css'
+import styles from "./modal.module.css";
 
 export type ModalProps<T> = {
   close(result: T): void;
@@ -16,7 +17,7 @@ type ModalData = {
   id: number;
   Component: React.ComponentType<ModalProps<unknown>>;
   props: Record<string, unknown>;
-  resolve(result: any): void
+  resolve(result: any): void;
 };
 
 type ModalContext = {
@@ -45,11 +46,11 @@ export function ModalProvider(props: PropsWithChildren) {
     return modals.map(({ Component, ...modal }) => {
       const closeModal = (result: unknown) => {
         setModals((ms) => ms.filter((m) => m.id != modal.id));
-        modal.resolve(result)
+        modal.resolve(result);
       };
-      return <Component key={modal.id} close={closeModal} {...modal.props}/>;
+      return <Component key={modal.id} close={closeModal} {...modal.props} />;
     });
-  }, [modals, data]);
+  }, [modals]);
 
   return (
     <Context.Provider value={data}>
@@ -71,10 +72,10 @@ export function useModal() {
     ): Promise<TReturn> {
       return new Promise((resolve) => {
         data.openModal({
-            id: data.nextID(),
-            Component: Component as React.ComponentType<ModalProps<unknown>>,
-            props: props,
-            resolve: result => resolve(result),
+          id: data.nextID(),
+          Component: Component as React.ComponentType<ModalProps<unknown>>,
+          props: props,
+          resolve: (result) => resolve(result),
         });
       });
     },
@@ -82,19 +83,18 @@ export function useModal() {
 }
 
 export type ModalBodyProps = PropsWithChildren<{
-    close?: (result: undefined) => void
-}>
+  close?: (result: undefined) => void;
+}>;
 
 export function ModalBody(props: ModalBodyProps) {
-    const close = useCallback(() => {
-        props.close?.(undefined)
-    }, [props.close])
+  const close = useCallback(() => {
+    props.close?.(undefined);
+  }, [props]);
 
-    return <div>
-        <div className={styles.screen} onClick={close}></div>
-        <div className={styles.modal}>
-            {props.children}
-        </div>
+  return (
+    <div>
+      <div className={styles.screen} onClick={close}></div>
+      <div className={styles.modal}>{props.children}</div>
     </div>
+  );
 }
-

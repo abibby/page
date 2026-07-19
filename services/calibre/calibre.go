@@ -18,6 +18,7 @@ import (
 	"github.com/abibby/page/services/cache"
 	"github.com/abibby/page/services/calibredb"
 	"github.com/abibby/page/services/hardcover"
+	"github.com/abibby/salusa/clog"
 )
 
 // Importer adds files to a Calibre library using the calibredb CLI.
@@ -41,7 +42,7 @@ func NewClient(cfg *config.Config, client *calibredb.Client) *Importer {
 
 // AddBook imports file into the Calibre library, applying metadata from book (which
 // may be nil if no Hardcover match was found).
-func (i *Importer) AddBook(ctx context.Context, file string, isAudiobook bool, book *hardcover.Book) error {
+func (i *Importer) AddBook(ctx context.Context, file string, isAudiobook bool, book *hardcover.Book) (int, error) {
 	if isAudiobook {
 		return i.addAudiobook(ctx, file, book)
 	}
@@ -78,31 +79,35 @@ func hardcoverBookToAddFlags(ctx context.Context, book *hardcover.Book) (*calibr
 			Cover:       coverPath,
 		}, func() {
 			if coverPath != "" {
-				os.Remove(coverPath)
+				err := os.Remove(coverPath)
+				if err != nil {
+					clog.Use(ctx).Warn("failed to remove temp cover file", "error", err, "file", coverPath)
+				}
 			}
 		}
 }
 
-func (i *Importer) addEbook(ctx context.Context, file string, book *hardcover.Book) error {
+func (i *Importer) addEbook(ctx context.Context, file string, book *hardcover.Book) (int, error) {
 	if existingBook, ok := i.getExistingID(ctx, book); ok {
-		return i.client.AddFormat(ctx, existingBook.ID, file, nil)
+		return existingBook.ID, i.client.AddFormat(ctx, existingBook.ID, file, &calibredb.AddFormatFlags{
+			DontReplace: true,
+		})
 	}
 	flags, cleanup := hardcoverBookToAddFlags(ctx, book)
 	defer cleanup()
-	_, err := i.client.Add(ctx, file, flags)
-	return err
+	return i.client.Add(ctx, file, flags)
 }
 
-func (i *Importer) addAudiobook(ctx context.Context, file string, book *hardcover.Book) error {
+func (i *Importer) addAudiobook(ctx context.Context, file string, book *hardcover.Book) (int, error) {
 	if book == nil {
-		return fmt.Errorf("calibre.Importer.Add: hardcover book must not be null")
+		return 0, fmt.Errorf("calibre.Importer.Add: hardcover book must not be null")
 	}
 
 	existingBook, ok := i.getExistingID(ctx, book)
 	if !ok {
 		id, err := i.AddEmptyBook(ctx, book)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		existingBook = &calibredb.Book{
@@ -116,14 +121,14 @@ func (i *Importer) addAudiobook(ctx context.Context, file string, book *hardcove
 
 	if i.DryRun {
 		fmt.Printf("[dry-run] ln '%s' '%s'\n", file, newFile)
-		return nil
+		return 0, nil
 	}
 
 	err := linkOrCopy(file, newFile)
 	if err != nil {
-		return fmt.Errorf("hard link failed: %w", err)
+		return 0, fmt.Errorf("hard link failed: %w", err)
 	}
-	return nil
+	return existingBook.ID, nil
 }
 
 func linkOrCopy(oldname, newname string) error {
@@ -136,13 +141,13 @@ func linkOrCopy(oldname, newname string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer source.Close()
+	defer source.Close() //nolint:errcheck
 
 	destination, err := os.Create(newname)
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
-	defer destination.Close()
+	defer destination.Close() //nolint:errcheck
 
 	_, err = io.Copy(destination, source)
 	if err != nil {
@@ -186,7 +191,7 @@ func downloadCover(ctx context.Context, url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("cover download: status %d", resp.StatusCode)
 	}
@@ -198,9 +203,12 @@ func downloadCover(ctx context.Context, url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	if _, err := io.Copy(f, io.LimitReader(resp.Body, 25<<20)); err != nil {
-		os.Remove(f.Name())
+		removeErr := os.Remove(f.Name())
+		if removeErr != nil {
+			clog.Use(ctx).Warn("failed to remove file", "error", removeErr, "file", f.Name())
+		}
 		return "", err
 	}
 	return f.Name(), nil

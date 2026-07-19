@@ -101,15 +101,19 @@ var BookView = request.Handler(func(r *BookViewRequest) (*FullBook, error) {
 })
 
 type BookImportRequest struct {
-	HardcoverID int     `json:"hardcover_id"`
-	File        fs.File `json:"file"`
+	BookID int     `json:"book_id"`
+	File   fs.File `json:"file"`
 
 	Ctx context.Context    `inject:""`
 	App *importer.Importer `inject:""`
+	DB  *calibredb.Client  `inject:""`
+}
+type BookImportResponse struct {
+	BookID int `json:"book_id"`
 }
 
-var BookImport = request.Handler(func(r *BookImportRequest) (any, error) {
-	defer r.File.Close()
+var BookImport = request.Handler(func(r *BookImportRequest) (*BookImportResponse, error) {
+	defer r.File.Close() //nolint:errcheck
 
 	stat, err := r.File.Stat()
 	if err != nil {
@@ -120,21 +124,34 @@ var BookImport = request.Handler(func(r *BookImportRequest) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
-	defer os.Remove(f.Name())
+	defer os.Remove(f.Name()) //nolint:errcheck
 
 	_, err = io.Copy(f, r.File)
 	if err != nil {
 		return nil, err
 	}
+	if r.BookID != 0 {
+		err = r.DB.AddFormat(r.Ctx, r.BookID, f.Name(), &calibredb.AddFormatFlags{
+			DontReplace: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &BookImportResponse{
+			BookID: r.BookID,
+		}, nil
+	}
 
-	err = r.App.ImportFile(r.Ctx, f.Name())
+	id, err := r.App.ImportFile(r.Ctx, f.Name())
 	if err != nil {
 		return nil, err
 	}
 
-	return nil, nil
+	return &BookImportResponse{
+		BookID: id,
+	}, nil
 })
 
 type BookAddRequest struct {

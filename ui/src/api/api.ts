@@ -122,7 +122,7 @@ export type ActiveTorrent = {
   trackers: unknown;
 };
 
-export const torrentEvents = new EventTarget();
+export const updateEvents = new EventTarget();
 
 export type Field =
   | "author_sort"
@@ -184,19 +184,28 @@ export async function bookView(
 
 export type BookImportRequest = BaseRequest & {
   file: File;
-  hardcover_id?: Number;
+  book_id?: number;
+};
+export type BookImportResponse = {
+  book_id: number;
 };
 
-export async function bookImport(r: BookImportRequest): Promise<Book[]> {
+export async function bookImport(
+  r: BookImportRequest,
+): Promise<BookImportResponse> {
   var data = new FormData();
   data.append("file", r.file);
-  if (r.hardcover_id) {
-    data.append("hardcover_id", String(r.hardcover_id));
+  if (r.book_id) {
+    data.append("book_id", String(r.book_id));
   }
   return fetch("/api/book/import", {
     method: "POST",
     body: data,
-  }).then((r) => r.json());
+  })
+    .then((r) => r.json())
+    .finally(() => {
+      updateEvents.dispatchEvent(new Event("book"));
+    });
 }
 
 export type BookAddRequest = {
@@ -211,7 +220,11 @@ export async function bookAdd(r: BookAddRequest): Promise<BookAddResponse> {
   return fetch("/api/book", {
     method: "POST",
     body: JSON.stringify(r),
-  }).then((r) => r.json());
+  })
+    .then((r) => r.json())
+    .finally(() => {
+      updateEvents.dispatchEvent(new Event("book"));
+    });
 }
 
 export type HardcoverSearchRequest = BaseRequest & {
@@ -259,6 +272,6 @@ export async function torrentAdd(r: TorrentAddRequest): Promise<Torrent[]> {
   })
     .then((r) => r.json())
     .finally(() => {
-      torrentEvents.dispatchEvent(new Event("add"));
+      updateEvents.dispatchEvent(new Event("torrent"));
     });
 }
