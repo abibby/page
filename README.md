@@ -29,6 +29,16 @@ replaced with underscores. Book directories retain an ID suffix to distinguish
 books with the same title. Existing ebook formats are preserved on repeat
 imports; audiobook tracks are stored by filename.
 
+Every five minutes, `page:scan` runs a library scan to register book folders that
+exist under `LIBRARY_PATH` but are missing from Page's catalogue. The scan expects
+`Author/Book/` folders, includes audio tracks in subfolders, and leaves all files
+and paths in place. It reads `metadata.opf` or embedded EPUB metadata, falling back
+to folder names when metadata is unavailable. It does not need Hardcover or
+qBittorrent. Indexed book folders are skipped, so scans do not overwrite catalogue
+edits or synchronize new formats into existing books. Symlinks and unrelated files
+are ignored; failed folders are reported and retried on the next scan. `DRY_RUN`
+prevents the scan from writing catalogue entries.
+
 Book search supports plain text and the `title:`, `authors:`, `series:`, `isbn:`,
 `tags:`, `id:`, and `identifiers:type:value` prefixes. Calibre's advanced Boolean
 search expressions and custom columns are not imported or interpreted.

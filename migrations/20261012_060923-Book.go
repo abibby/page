@@ -26,7 +26,7 @@ func init() {
 			table.JSON("tags")
 			table.String("timestamp")
 			table.String("uuid")
-			table.String("path")
+			table.String("path").Unique()
 			table.String("description")
 		}),
 		Down: schema.DropIfExists("library_books"),
