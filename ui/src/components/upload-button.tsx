@@ -1,71 +1,62 @@
-import { useCallback, useState } from "react";
+import { useRef, useState } from "react";
 import { bookImport } from "../api/api";
-import { Link } from "react-router";
-import { routePath } from "../routes";
+import { Link, useRevalidator } from "react-router";
+import { Icon } from "./icon";
 
-export type UploadButtonProps = {
-  bookId?: number;
-};
-
-export function UploadButton(props: UploadButtonProps) {
+export function UploadButton({ bookId }: { bookId?: number }) {
+  const input = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
-  const [newBookID, setNewBookID] = useState<number>();
-
-  const uploadFiles = useCallback(async () => {
-    const files = await openFilePicker();
-    if (!files) {
-      return;
-    }
-    setLoading(true);
-    try {
-      const resp = await bookImport({
-        book_id: props.bookId,
-        file: files[0],
-      });
-      setNewBookID(resp.book_id);
-    } finally {
-      setLoading(false);
-    }
-  }, [props.bookId]);
+  const [result, setResult] = useState<number>();
+  const [error, setError] = useState("");
+  const revalidator = useRevalidator();
   return (
-    <div>
-      <button onClick={uploadFiles} disabled={loading}>
-        Upload Book
+    <div className="upload-control">
+      <input
+        ref={input}
+        type="file"
+        hidden
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          setLoading(true);
+          setError("");
+          setResult(undefined);
+          try {
+            const response = await bookImport({ book_id: bookId, file });
+            setResult(response.book_id);
+            if (bookId) await revalidator.revalidate();
+          } catch (error) {
+            setError(
+              error instanceof Error
+                ? error.message
+                : "The import failed. Please try again.",
+            );
+          } finally {
+            setLoading(false);
+            if (input.current) input.current.value = "";
+          }
+        }}
+      />
+      <button
+        className="button button-primary"
+        disabled={loading}
+        onClick={() => input.current?.click()}
+      >
+        <Icon name="upload" size={17} />
+        {loading ? "Importing…" : bookId ? "Upload a file" : "Import book"}
       </button>
-      {newBookID && (
-        <Link to={routePath("book.view", { bookId: newBookID })}>
-          Open new book
-        </Link>
+      {error && (
+        <span className="upload-message error-text" role="alert">
+          {error}
+        </span>
+      )}
+      {result && (
+        <span className="upload-message" role="status">
+          <Icon name="check" size={14} />
+          Imported successfully
+          {!bookId && <Link to={`/book/${result}`}>View book</Link>}
+        </span>
       )}
     </div>
   );
-}
-
-type OpenFilePickerOptions = {
-  multiple?: boolean;
-};
-
-function openFilePicker(
-  options: OpenFilePickerOptions = {},
-): Promise<FileList | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.style.display = "none";
-
-    input.multiple = options.multiple ?? false;
-
-    input.onchange = () => {
-      resolve(input.files);
-      input.remove();
-    };
-
-    document.body.appendChild(input);
-
-    if ("showPicker" in HTMLInputElement.prototype) {
-      input.showPicker();
-    } else {
-      input.click();
-    }
-  });
 }

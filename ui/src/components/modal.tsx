@@ -5,9 +5,10 @@ import React, {
   useContext,
   useMemo,
   useState,
+  useEffect,
+  useRef,
   type PropsWithChildren,
 } from "react";
-import styles from "./modal.module.css";
 
 export type ModalProps<T> = {
   close(result: T): void;
@@ -87,14 +88,27 @@ export type ModalBodyProps = PropsWithChildren<{
 }>;
 
 export function ModalBody(props: ModalBodyProps) {
-  const close = useCallback(() => {
-    props.close?.(undefined);
-  }, [props]);
-
+  const dialog = useRef<HTMLDialogElement>(null);
+  const close = useCallback(() => props.close?.(undefined), [props]);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
   return (
-    <div>
-      <div className={styles.screen} onClick={close}></div>
-      <div className={styles.modal}>{props.children}</div>
-    </div>
+    <dialog
+      ref={dialog}
+      className="modal"
+      aria-label="Add book to library"
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <div className="modal-content">{props.children}</div>
+    </dialog>
   );
 }

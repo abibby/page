@@ -26,7 +26,7 @@ export type FullBook = Book & {
 export type HardcoverBook = {
   id: string | number;
   title: string;
-  image: { url: string };
+  image: { url: string } | null;
   contributions: Contribution[];
 };
 
@@ -122,6 +122,28 @@ export type ActiveTorrent = {
   trackers: unknown;
 };
 
+async function readResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    if (response.status === 404)
+      throw new Response("Not found", { status: 404 });
+    let message = `Request failed (${response.status}). Please try again.`;
+    try {
+      const body = await response.json();
+      if (typeof body.message === "string") message = body.message;
+      else if (typeof body.error === "string") message = body.error;
+    } catch {
+      /* The server may return a non-JSON error. */
+    }
+    throw new Error(message);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json();
+}
+
+async function readList<T>(response: Response): Promise<T[]> {
+  return (await readResponse<T[] | null>(response)) ?? [];
+}
+
 export const updateEvents = new EventTarget();
 
 export type Field =
@@ -160,6 +182,7 @@ export type BookListRequest = BaseRequest & {
 export async function bookList(r: BookListRequest): Promise<Book[]> {
   const p = new URLSearchParams();
   p.set("search", r.search ?? "");
+  p.set("limit", "99");
   if (r.order) {
     p.set("order", r.order);
   }
@@ -168,7 +191,7 @@ export async function bookList(r: BookListRequest): Promise<Book[]> {
   }
   return fetch("/api/book?" + p.toString(), {
     signal: r.signal,
-  }).then((r) => r.json());
+  }).then(readList<Book>);
 }
 
 export type BookViewRequest = BaseRequest & {};
@@ -179,7 +202,7 @@ export async function bookView(
 ): Promise<FullBook> {
   return fetch(`/api/book/${id}`, {
     signal: r.signal,
-  }).then((r) => r.json());
+  }).then(readResponse<FullBook>);
 }
 
 export type BookImportRequest = BaseRequest & {
@@ -193,7 +216,7 @@ export type BookImportResponse = {
 export async function bookImport(
   r: BookImportRequest,
 ): Promise<BookImportResponse> {
-  var data = new FormData();
+  const data = new FormData();
   data.append("file", r.file);
   if (r.book_id) {
     data.append("book_id", String(r.book_id));
@@ -201,10 +224,12 @@ export async function bookImport(
   return fetch("/api/book/import", {
     method: "POST",
     body: data,
+    signal: r.signal,
   })
-    .then((r) => r.json())
-    .finally(() => {
+    .then(readResponse<BookImportResponse>)
+    .then((result) => {
       updateEvents.dispatchEvent(new Event("book"));
+      return result;
     });
 }
 
@@ -219,11 +244,13 @@ export type BookAddResponse = {
 export async function bookAdd(r: BookAddRequest): Promise<BookAddResponse> {
   return fetch("/api/book", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(r),
   })
-    .then((r) => r.json())
-    .finally(() => {
+    .then(readResponse<BookAddResponse>)
+    .then((result) => {
       updateEvents.dispatchEvent(new Event("book"));
+      return result;
     });
 }
 
@@ -237,7 +264,7 @@ export async function hardcoverSearch(
   p.set("q", r.search);
   return fetch("/api/hardcover/search?" + p.toString(), {
     signal: r.signal,
-  }).then((r) => r.json());
+  }).then(readList<HardcoverBook>);
 }
 
 export type TorrentSearchRequest = BaseRequest & {
@@ -250,7 +277,7 @@ export async function torrentSearch(
   p.set("q", r.search);
   return fetch("/api/torrent/search?" + p.toString(), {
     signal: r.signal,
-  }).then((r) => r.json());
+  }).then(readList<Torrent>);
 }
 
 export type TorrentActiveRequest = BaseRequest & {};
@@ -259,19 +286,18 @@ export async function torrentActive(
 ): Promise<ActiveTorrent[]> {
   return fetch("/api/torrent/active", {
     signal: r.signal,
-  }).then((r) => r.json());
+  }).then(readList<ActiveTorrent>);
 }
 
 export type TorrentAddRequest = {
   url: string;
 };
-export async function torrentAdd(r: TorrentAddRequest): Promise<Torrent[]> {
-  return fetch("/api/torrent", {
+export async function torrentAdd(r: TorrentAddRequest): Promise<void> {
+  const response = await fetch("/api/torrent", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(r),
-  })
-    .then((r) => r.json())
-    .finally(() => {
-      updateEvents.dispatchEvent(new Event("torrent"));
-    });
+  });
+  if (!response.ok) await readResponse(response);
+  updateEvents.dispatchEvent(new Event("torrent"));
 }

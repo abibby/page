@@ -1,233 +1,224 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type ChangeEventHandler,
-  type PropsWithChildren,
-} from "react";
-import { useAsync } from "../hooks/use-async";
+import { useCallback, useState } from "react";
 import {
   hardcoverSearch,
   torrentSearch,
-  type Book,
   type HardcoverBook,
   type Torrent,
 } from "../api/api";
-import styles from "./search.module.css";
+import { useAsync } from "../hooks/use-async";
 import { useActiveTorrents } from "../hooks/use-active-torrents";
+import { Cover } from "./book-card";
+import { BookSkeletons, EmptyState, ErrorNotice } from "./feedback";
+import { Icon } from "./icon";
+import { formatBytes } from "../lib/format";
 
-export type BookSearchParams = {
+export function BookSearch({
+  search,
+  onSelectBook,
+  busy,
+}: {
   search: string;
-  onSelectBook: (b: HardcoverBook) => void;
-};
-
-export function BookSearch(params: BookSearchParams) {
+  onSelectBook: (book: HardcoverBook) => void;
+  busy?: boolean;
+}) {
+  const [attempt, setAttempt] = useState(0);
   const books = useAsync(
     useCallback(
-      async (s: AbortSignal) => {
-        if (params.search === "") {
-          return [];
-        }
-        return hardcoverSearch({
-          search: params.search,
-          signal: s,
-        });
+      (signal) => {
+        void attempt;
+        return search.trim()
+          ? hardcoverSearch({ search, signal })
+          : Promise.resolve([]);
       },
-      [params.search],
+      [search, attempt],
     ),
   );
-  if (books.loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (books.error) {
-    return <div>{books.error.toString()}</div>;
-  }
-
+  if (!search.trim())
+    return (
+      <EmptyState title="What will you read next?" icon="search">
+        <p>
+          Search Hardcover by title or author.
+          <br />
+          Find a book you love and give it a home in your library.
+        </p>
+      </EmptyState>
+    );
+  if (books.loading) return <BookSkeletons />;
+  if (books.error)
+    return (
+      <ErrorNotice
+        error={books.error}
+        retry={() => setAttempt((value) => value + 1)}
+      />
+    );
+  if (!books.value.length)
+    return (
+      <EmptyState title="No matching books" icon="search">
+        <p>Try a different title, author, or a shorter search.</p>
+      </EmptyState>
+    );
   return (
-    <ul className={styles.bookList}>
-      {books.value.map((b) => (
-        <li key={b.id} onClick={() => params.onSelectBook(b)}>
-          <HardcoverBook book={b} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <p className="results-label">
+        {books.value.length} results from Hardcover
+      </p>
+      <ul className="book-grid discovery-grid">
+        {books.value.map((book) => (
+          <li key={book.id}>
+            <button
+              className="book-card discovery-card"
+              disabled={busy}
+              onClick={() => onSelectBook(book)}
+            >
+              <div className="book-cover-wrap">
+                <Cover
+                  title={book.title}
+                  author={hardcoverAuthor(book)}
+                  url={book.image?.url}
+                />
+                <span className="cover-open">
+                  <Icon name="plus" size={18} />
+                </span>
+              </div>
+              <div className="book-card-info">
+                <h3>{book.title}</h3>
+                <p>{hardcoverAuthor(book) || "Unknown author"}</p>
+                <span className="add-book-label">
+                  <Icon name="plus" size={14} />
+                  Add to library
+                </span>
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
-type HardcoverBookProps = {
-  book: HardcoverBook;
-};
-
-function HardcoverBook(props: HardcoverBookProps) {
-  return (
-    <Book
-      title={props.book.title}
-      coverURL={props.book.image.url}
-      author={hardcoverAuthor(props.book)}
-    />
-  );
-}
-
-export type BookProps = {
-  title: string;
-  coverURL: string;
-  author: string;
-};
-
-export function Book(props: BookProps) {
-  return (
-    <div className={styles.book}>
-      <img src={props.coverURL} alt="" />
-      <div>{props.title}</div>
-      <div>{props.author}</div>
-    </div>
-  );
-}
-
-export function BookList(props: PropsWithChildren) {
-  return <ul className={styles.bookList}>{props.children}</ul>;
-}
-
-function hardcoverAuthor(book: HardcoverBook): string {
-  return book.contributions
-    .map((a) => a.author?.name)
+function hardcoverAuthor(book: HardcoverBook) {
+  return (book.contributions ?? [])
+    .map((contribution) => contribution.author?.name)
     .filter(Boolean)
     .join(" & ");
 }
 
-export type TorrentSearchParams = {
+export function TorrentSearch({
+  search,
+  onSelectTorrent,
+}: {
   search: string;
-  onSelectTorrent: (b: Torrent) => void;
-};
-
-export function TorrentSearch(params: TorrentSearchParams) {
+  onSelectTorrent: (torrent: Torrent) => Promise<void>;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  const [sortBySeeds, setSortBySeeds] = useState(false);
+  const [pending, setPending] = useState<string>();
+  const [queued, setQueued] = useState<string[]>([]);
+  const [error, setError] = useState<unknown>();
+  const active = useActiveTorrents();
   const torrents = useAsync(
     useCallback(
-      async (s: AbortSignal) => {
-        if (params.search === "") {
-          return [];
-        }
-        return torrentSearch({
-          search: params.search,
-          signal: s,
-        });
+      (signal) => {
+        void attempt;
+        return search.trim()
+          ? torrentSearch({ search, signal })
+          : Promise.resolve([]);
       },
-      [params.search],
+      [search, attempt],
     ),
   );
-
-  const [seedSort, setSeedSort] = useState(false);
-
-  const seedSortInput = useCallback<ChangeEventHandler<HTMLInputElement>>(
-    (e) => {
-      setSeedSort(e.currentTarget.checked);
-    },
-    [],
-  );
-
-  const sortedList = useMemo(() => {
-    if (seedSort) {
-      return Array.from(torrents.value ?? []).sort(
-        (a, b) => (b.seeders ?? 0) - (a.seeders ?? 0),
-      );
-    }
-    return torrents.value ?? [];
-  }, [torrents.value, seedSort]);
-
-  if (torrents.loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (torrents.error) {
-    return <div>{torrents.error.toString()}</div>;
-  }
-
-  if (torrents.value.length === 0) {
-    return <div>No Results</div>;
-  }
-
-  return (
-    <section>
-      <label>
-        sort by seeds
-        <input type="checkbox" checked={seedSort} onChange={seedSortInput} />
-      </label>
-      <ul className={styles.torrentList}>
-        <li>
-          <div className={`${styles.torrent} ${styles.torrentHeader}`}>
-            <div className={styles.title}>Title</div>
-            <div className={styles.size}>Size</div>
-            <div className={styles.peers}>Peers</div>
-            <div className={styles.tracker}>Tracker</div>
-          </div>
-        </li>
-        {sortedList.map((t) => (
-          <li key={t.id} onClick={() => params.onSelectTorrent(t)}>
-            <TorrentInfo torrent={t} />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-type TorrentInfoProps = {
-  torrent: Torrent;
-};
-
-function TorrentInfo(props: TorrentInfoProps) {
-  const activeTorrents = useActiveTorrents();
-  const activeTorrent = useMemo(() => {
-    return activeTorrents.find(
-      (t) => t.hash.toLowerCase() == props.torrent.info_hash?.toLowerCase(),
+  if (torrents.loading)
+    return (
+      <p className="loading-message" role="status">
+        Searching available downloads…
+      </p>
     );
-  }, [activeTorrents, props.torrent.info_hash]);
+  if (torrents.error)
+    return (
+      <ErrorNotice
+        error={torrents.error}
+        retry={() => setAttempt((value) => value + 1)}
+      />
+    );
+  if (!torrents.value.length)
+    return (
+      <EmptyState title="No downloads found" icon="search">
+        <p>Try adjusting the title or author in your search.</p>
+      </EmptyState>
+    );
+  const sorted = sortBySeeds
+    ? [...torrents.value].sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
+    : torrents.value;
   return (
-    <div className={`${styles.torrent} ${activeTorrent && styles.active}`}>
-      <div className={styles.title}>{props.torrent.title}</div>
-      <div className={styles.size}>{formatBytes(props.torrent.size)}</div>
-      <div className={styles.peers}>
-        <span className={pillStyle(props.torrent.seeders ?? 0)}>
-          {props.torrent.seeders ?? 0} / {props.torrent.peers ?? 0}
-        </span>
+    <div className="torrent-results">
+      <div className="section-toolbar">
+        <span className="muted small">{sorted.length} available downloads</span>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={sortBySeeds}
+            onChange={(event) => setSortBySeeds(event.target.checked)}
+          />
+          Most seeders first
+        </label>
       </div>
-      <div className={styles.tracker}>{props.torrent.tracker}</div>
-      <div className={styles.downloading}>
-        {activeTorrent && (
-          <>
-            {activeTorrent.state}{" "}
-            {(
-              Math.min(1, activeTorrent.downloaded / activeTorrent.total_size) *
-              100
-            ).toFixed(0)}
-            %
-          </>
-        )}
-      </div>
+      {error != null && <ErrorNotice error={error} />}
+      <ul className="download-results">
+        {sorted.map((torrent) => {
+          const downloading =
+            queued.includes(torrent.id) ||
+            active.some(
+              (item) =>
+                item.hash.toLowerCase() === torrent.info_hash?.toLowerCase(),
+            );
+          return (
+            <li key={torrent.id}>
+              <span className="file-icon">
+                <Icon name="file" />
+              </span>
+              <div className="download-info">
+                <h3>{torrent.title}</h3>
+                <p>
+                  {formatBytes(torrent.size)}
+                  <span>·</span>
+                  {torrent.tracker}
+                  <span>·</span>
+                  <span
+                    className={
+                      (torrent.seeders ?? 0) > 0 ? "positive-text" : ""
+                    }
+                  >
+                    {torrent.seeders ?? 0} seeders
+                  </span>
+                </p>
+              </div>
+              <button
+                className="button button-secondary button-small"
+                disabled={downloading || pending !== undefined}
+                onClick={async () => {
+                  setPending(torrent.id);
+                  setError(undefined);
+                  try {
+                    await onSelectTorrent(torrent);
+                    setQueued((items) => [...items, torrent.id]);
+                  } catch (error) {
+                    setError(error);
+                  } finally {
+                    setPending(undefined);
+                  }
+                }}
+              >
+                <Icon name={downloading ? "check" : "download"} size={16} />
+                {downloading
+                  ? "Queued"
+                  : pending === torrent.id
+                    ? "Adding…"
+                    : "Download"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
-}
-
-function pillStyle(seeders: number): string {
-  let className = styles.pill + " ";
-  if (seeders >= 15) {
-    return className + styles.good;
-  }
-  if (seeders > 0) {
-    return className + styles.ok;
-  }
-  return className + styles.bad;
-}
-
-function formatBytes(bytes: number, decimals = 2) {
-  if (bytes === 0) return "0 Bytes";
-
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }

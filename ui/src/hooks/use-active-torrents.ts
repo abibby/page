@@ -10,8 +10,11 @@ async function updateActiveTorrents() {
   if (numActive == 0) {
     return;
   }
-  const torrents = await torrentActive();
-  activeTorrents.value = torrents;
+  try {
+    activeTorrents.value = await torrentActive();
+  } catch {
+    /* The downloads page shows connection errors; search can still be used. */
+  }
 }
 
 updateEvents.addEventListener("torrent", () => {
@@ -28,6 +31,7 @@ export function useActiveTorrents(): ActiveTorrent[] {
 
   useEffect(() => {
     numActive++;
+    void updateActiveTorrents();
     return () => {
       numActive--;
     };

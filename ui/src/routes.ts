@@ -4,6 +4,8 @@ import {
   type LoaderFunction,
   type RouteObject,
 } from "react-router";
+import { Downloads } from "./pages/downloads";
+import { PageLoading, RouteError } from "./pages/error";
 import { Home } from "./pages/home";
 import type React from "react";
 import { Search } from "./pages/search";
@@ -11,6 +13,10 @@ import { BookView } from "./pages/book";
 import { bookView } from "./api/api";
 
 const routes = {
+  downloads: {
+    path: "/downloads",
+    Component: Downloads as React.ComponentType,
+  },
   home: {
     path: "/",
     Component: Home as React.ComponentType,
@@ -22,7 +28,9 @@ const routes = {
   "book.view": {
     path: "/book/:bookId",
     loader: async (args) => {
-      const book = await bookView(Number(args.params.bookId));
+      const book = await bookView(Number(args.params.bookId), {
+        signal: args.request.signal,
+      });
       return {
         book: book,
       };
@@ -60,10 +68,23 @@ export type Route = Routes[RouteName];
 export type RouteParams2<T extends RouteName> = RouteParams<Routes[T]["path"]>;
 
 export function buildRoutes(): RouteObject[] {
-  return Object.entries(routes).map(([id, route]) => ({
+  const result: RouteObject[] = Object.entries(routes).map(([id, route]) => ({
     ...route,
     id: id,
+    ErrorBoundary: RouteError,
+    HydrateFallback: PageLoading,
   }));
+  return [
+    ...result,
+    {
+      path: "*",
+      loader: () => {
+        throw new Response("Not found", { status: 404 });
+      },
+      ErrorBoundary: RouteError,
+      HydrateFallback: PageLoading,
+    },
+  ];
 }
 
 type RouteArgs<T extends RouteName> = keyof RouteParams<
