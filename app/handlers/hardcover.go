@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/abibby/page/services/hardcover"
-	"github.com/abibby/salusa/request"
+	"gosalusa.com/request"
 )
 
 type HardcoverSearchRequest struct {

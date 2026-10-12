@@ -14,8 +14,8 @@ import (
 
 	"github.com/abibby/page/config"
 	"github.com/abibby/page/services/bookmeta"
-	"github.com/abibby/page/services/calibre"
 	"github.com/abibby/page/services/hardcover"
+	"github.com/abibby/page/services/library"
 	"github.com/autobrr/go-qbittorrent"
 )
 
@@ -24,18 +24,18 @@ var ErrNoBook = errors.New("no book")
 type Importer struct {
 	cfg     *config.Config
 	hc      *hardcover.Client
-	calibre *calibre.Importer
+	library *library.Store
 	qbt     *qbittorrent.Client
 	log     *slog.Logger
 
 	hcCache map[string]*hardcover.Book
 }
 
-func New(cfg *config.Config, hc *hardcover.Client, importer *calibre.Importer, qbt *qbittorrent.Client, logger *slog.Logger) *Importer {
+func New(cfg *config.Config, hc *hardcover.Client, importer *library.Store, qbt *qbittorrent.Client, logger *slog.Logger) *Importer {
 	return &Importer{
 		cfg:     cfg,
 		hc:      hc,
-		calibre: importer,
+		library: importer,
 		qbt:     qbt,
 		log:     logger,
 		hcCache: map[string]*hardcover.Book{},
@@ -138,7 +138,7 @@ func (a *Importer) ImportFile(ctx context.Context, path string) (int, error) {
 	if label == "" {
 		label = filepath.Base(path)
 	}
-	id, err := a.calibre.AddBook(ctx, path, meta.IsAudiobook, book)
+	id, err := a.library.AddBook(ctx, path, meta.IsAudiobook, book)
 	if err != nil {
 		return 0, err
 	}
@@ -184,5 +184,4 @@ func (a *Importer) lookup(ctx context.Context, meta bookmeta.Meta) (*hardcover.B
 func (a *Importer) clearCache() {
 	a.hcCache = map[string]*hardcover.Book{}
 
-	a.calibre.ClearCache()
 }

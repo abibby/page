@@ -2,46 +2,47 @@ package handlers
 
 import (
 	"context"
-	"fmt"
+	"database/sql"
+	"errors"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
+	"github.com/abibby/page/app/models"
 	"github.com/abibby/page/config"
-	"github.com/abibby/page/services/calibre"
-	"github.com/abibby/page/services/calibredb"
 	"github.com/abibby/page/services/hardcover"
 	"github.com/abibby/page/services/importer"
-	"github.com/abibby/salusa/request"
+	"github.com/abibby/page/services/library"
+	"gosalusa.com/request"
 )
 
 type FullBook struct {
-	calibredb.Book
+	models.Book
 
 	Description string   `json:"description"`
 	Files       []string `json:"files"`
 }
 
 type BookListRequest struct {
-	Search    string          `query:"search"`
-	Limit     int             `query:"limit"`
-	SortBy    calibredb.Field `query:"order"`
-	Ascending bool            `query:"ascending"`
+	Search    string `query:"search"`
+	Limit     int    `query:"limit"`
+	SortBy    string `query:"order"`
+	Ascending bool   `query:"ascending"`
 
-	Ctx context.Context   `inject:""`
-	DB  *calibredb.Client `inject:""`
-	Cfg *config.Config    `inject:""`
+	Ctx context.Context `inject:""`
+	DB  *library.Store  `inject:""`
+	Cfg *config.Config  `inject:""`
 }
 
-var BookList = request.Handler(func(r *BookListRequest) ([]calibredb.Book, error) {
+var BookList = request.Handler(func(r *BookListRequest) ([]models.Book, error) {
 	limit := 20
 	if r.Limit > 0 && r.Limit < 100 {
 		limit = r.Limit
 	}
-	books, err := r.DB.List(r.Ctx, &calibredb.ListFlags{
-		Fields:    []calibredb.Field{calibredb.FieldAll},
+	books, err := r.DB.List(r.Ctx, &library.ListOptions{
 		Search:    r.Search,
 		Limit:     limit,
 		SortBy:    r.SortBy,
@@ -59,43 +60,32 @@ var BookList = request.Handler(func(r *BookListRequest) ([]calibredb.Book, error
 type BookViewRequest struct {
 	ID int `path:"id"`
 
-	Ctx context.Context   `inject:""`
-	DB  *calibredb.Client `inject:""`
-	Cfg *config.Config    `inject:""`
+	Ctx context.Context `inject:""`
+	DB  *library.Store  `inject:""`
+	Cfg *config.Config  `inject:""`
 }
 
 var BookView = request.Handler(func(r *BookViewRequest) (*FullBook, error) {
-	books, err := r.DB.List(r.Ctx, &calibredb.ListFlags{
-		Fields: []calibredb.Field{calibredb.FieldAll},
-		Search: fmt.Sprintf("id:%d", r.ID),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(books) == 0 {
+	b, err := r.DB.Get(r.Ctx, r.ID)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, request.ErrStatusNotFound
 	}
-
-	b := books[0]
-
-	meta, err := r.DB.ShowMetadata(r.Ctx, b.ID)
 	if err != nil {
 		return nil, err
 	}
-
-	files, err := os.ReadDir(path.Dir(b.Cover))
-	if err != nil {
+	files, err := os.ReadDir(b.Directory)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	fileNames := make([]string, len(files))
 	for i, f := range files {
 		fileNames[i] = f.Name()
 	}
-	cleanBook(r.Cfg, &b)
+	cleanBook(r.Cfg, b)
 
 	return &FullBook{
-		Book:        b,
-		Description: meta.Description,
+		Book:        *b,
+		Description: b.Description,
 		Files:       fileNames,
 	}, nil
 })
@@ -106,7 +96,7 @@ type BookImportRequest struct {
 
 	Ctx context.Context    `inject:""`
 	App *importer.Importer `inject:""`
-	DB  *calibredb.Client  `inject:""`
+	DB  *library.Store     `inject:""`
 }
 type BookImportResponse struct {
 	BookID int `json:"book_id"`
@@ -120,22 +110,26 @@ var BookImport = request.Handler(func(r *BookImportRequest) (*BookImportResponse
 		return nil, err
 	}
 
-	f, err := os.CreateTemp("", "book-*-"+stat.Name())
+	tempDir, err := os.MkdirTemp("", "book-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tempDir) //nolint:errcheck
+	f, err := os.Create(filepath.Join(tempDir, filepath.Base(stat.Name())))
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close() //nolint:errcheck
-
-	defer os.Remove(f.Name()) //nolint:errcheck
 
 	_, err = io.Copy(f, r.File)
 	if err != nil {
 		return nil, err
 	}
 	if r.BookID != 0 {
-		err = r.DB.AddFormat(r.Ctx, r.BookID, f.Name(), &calibredb.AddFormatFlags{
-			DontReplace: true,
-		})
+		err = r.DB.AddFormat(r.Ctx, r.BookID, f.Name())
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, request.ErrStatusNotFound
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +153,7 @@ type BookAddRequest struct {
 
 	Ctx       context.Context   `inject:""`
 	Hardcover *hardcover.Client `inject:""`
-	Calibre   *calibre.Importer `inject:""`
+	Library   *library.Store    `inject:""`
 }
 
 type BookAddResponse struct {
@@ -172,7 +166,7 @@ var BookAdd = request.Handler(func(r *BookAddRequest) (*BookAddResponse, error) 
 		return nil, err
 	}
 
-	id, err := r.Calibre.AddEmptyBook(r.Ctx, book)
+	id, err := r.Library.AddEmptyBook(r.Ctx, book)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +177,7 @@ var BookAdd = request.Handler(func(r *BookAddRequest) (*BookAddResponse, error) 
 
 })
 
-func cleanBook(cfg *config.Config, book *calibredb.Book) {
+func cleanBook(cfg *config.Config, book *models.Book) {
 	for i, f := range book.Formats {
 		book.Formats[i] = cleanPath(cfg, f)
 	}
@@ -191,5 +185,20 @@ func cleanBook(cfg *config.Config, book *calibredb.Book) {
 }
 
 func cleanPath(cfg *config.Config, p string) string {
-	return "/api/d" + strings.TrimPrefix(p, cfg.CalibreLibrary)
+	if p == "" {
+		return ""
+	}
+	root, err := filepath.Abs(cfg.LibraryPath)
+	if err != nil {
+		return ""
+	}
+	relative, err := filepath.Rel(root, p)
+	if err != nil || !filepath.IsLocal(relative) {
+		return ""
+	}
+	parts := strings.Split(filepath.ToSlash(relative), "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	return "/api/d/" + strings.Join(parts, "/")
 }

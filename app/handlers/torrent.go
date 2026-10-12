@@ -6,9 +6,9 @@ import (
 	"github.com/abibby/page/config"
 
 	// "github.com/abibby/page/services/qbittorrent"
-	"github.com/abibby/salusa/request"
 	qbittorrent "github.com/autobrr/go-qbittorrent"
 	jackett "github.com/webtor-io/go-jackett"
+	"gosalusa.com/request"
 )
 
 type TorrentSearchRequest struct {

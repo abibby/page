@@ -9,11 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abibby/salusa/database"
-	"github.com/abibby/salusa/database/dialects/sqlite"
-	"github.com/abibby/salusa/env"
-	"github.com/abibby/salusa/event"
 	"github.com/joho/godotenv"
+	"gosalusa.com/database"
+	"gosalusa.com/env"
 )
 
 type Config struct {
@@ -21,7 +19,6 @@ type Config struct {
 	BasePath string
 
 	Database database.Config
-	Queue    event.Config
 
 	// qBittorrent WebUI.
 	QbitURL      string
@@ -31,13 +28,8 @@ type Config struct {
 	QbitDoneTag  string
 	QbitErrorTag string
 
-	// Calibre.
-	CalibreLibrary string
-	// CalibreServer   string
-	// CalibreUsername string
-	// CalibrePassword string
-	CalibredbBin  string
-	AddDuplicates bool
+	// Library files. Existing CALIBRE_LIBRARY configurations remain supported.
+	LibraryPath string
 
 	// Hardcover GraphQL API.
 	HardcoverURL   string
@@ -74,8 +66,7 @@ func Load() *Config {
 	c := &Config{
 		Port:     env.Int("PORT", 8010),
 		BasePath: env.String("BASE_PATH", ""),
-		Database: sqlite.NewConfig(env.String("DATABASE_PATH", "./db.sqlite")),
-		Queue:    event.NewChannelQueueConfig(),
+		Database: NewSQLiteConfig(env.String("DATABASE_PATH", "./db.sqlite")),
 
 		QbitURL:        env.String("QBIT_URL", "http://localhost:8080"),
 		QbitUsername:   os.Getenv("QBIT_USERNAME"),
@@ -83,9 +74,7 @@ func Load() *Config {
 		QbitTag:        env.String("QBIT_TAG", "book"),
 		QbitDoneTag:    env.String("QBIT_DONE_TAG", "done"),
 		QbitErrorTag:   env.String("QBIT_ERROR_TAG", "error"),
-		CalibreLibrary: os.Getenv("CALIBRE_LIBRARY"),
-		CalibredbBin:   env.String("CALIBREDB_BIN", "calibredb"),
-		AddDuplicates:  env.Bool("ADD_DUPLICATES", false),
+		LibraryPath:    env.String("LIBRARY_PATH", env.String("CALIBRE_LIBRARY", "./library")),
 		HardcoverURL:   env.String("HARDCOVER_URL", "https://api.hardcover.app/v1/graphql"),
 		HardcoverToken: os.Getenv("HARDCOVER_TOKEN"),
 		GeminiAPIKey:   os.Getenv("GEMINI_API_KEY"),
@@ -116,9 +105,6 @@ func (c *Config) GetBaseURL() string {
 
 func (c *Config) DBConfig() database.Config {
 	return c.Database
-}
-func (c *Config) QueueConfig() event.Config {
-	return c.Queue
 }
 
 // RemapPath rewrites a container path to a host path using the configured

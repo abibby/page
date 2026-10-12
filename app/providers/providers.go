@@ -4,18 +4,21 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/abibby/page/app/models"
 	"github.com/abibby/page/config"
-	"github.com/abibby/page/services/calibre"
-	"github.com/abibby/page/services/calibredb"
 	"github.com/abibby/page/services/hardcover"
 	"github.com/abibby/page/services/importer"
-	"github.com/abibby/salusa/di"
+	"github.com/abibby/page/services/library"
 	"github.com/autobrr/go-qbittorrent"
+	"github.com/jmoiron/sqlx"
 	"github.com/webtor-io/go-jackett"
+	"gosalusa.com/database/model/modeldi"
+	"gosalusa.com/di"
 )
 
-// var ModelRegistrar = modeldi.NewModelRegistrar()
-var registrar = []func(context.Context){}
+var registrar = []func(context.Context){
+	modeldi.Register[*models.Book],
+}
 
 func Add(register func(context.Context)) {
 	registrar = append(registrar, register)
@@ -27,11 +30,6 @@ func Register(ctx context.Context) error {
 		register(ctx)
 	}
 
-	di.RegisterLazySingletonWith(ctx, func(cfg *config.Config) (*calibredb.Client, error) {
-		return calibredb.NewClient(cfg.CalibredbBin, &calibredb.GlobalFlags{
-			LibraryPath: cfg.CalibreLibrary,
-		}), nil
-	})
 	di.RegisterLazySingletonWith(ctx, func(cfg *config.Config) (*qbittorrent.Client, error) {
 		return qbittorrent.NewClient(qbittorrent.Config{
 			Host:     cfg.QbitURL,
@@ -40,18 +38,19 @@ func Register(ctx context.Context) error {
 		}), nil
 	})
 
-	type calibreWith struct {
-		Cfg             *config.Config    `inject:""`
-		CalibredbClient *calibredb.Client `inject:""`
+	type libraryWith struct {
+		Ctx context.Context `inject:""`
+		Cfg *config.Config  `inject:""`
+		DB  *sqlx.DB        `inject:""`
 	}
-	di.RegisterLazySingletonWith(ctx, func(w *calibreWith) (*calibre.Importer, error) {
-		return calibre.NewClient(w.Cfg, w.CalibredbClient), nil
+	di.RegisterLazySingletonWith(ctx, func(w *libraryWith) (*library.Store, error) {
+		return library.New(w.Ctx, w.Cfg, w.DB)
 	})
 
 	type appWith struct {
 		Cfg      *config.Config      `inject:""`
 		HC       *hardcover.Client   `inject:""`
-		Importer *calibre.Importer   `inject:""`
+		Importer *library.Store      `inject:""`
 		Qbt      *qbittorrent.Client `inject:""`
 		Log      *slog.Logger        `inject:""`
 	}
@@ -59,11 +58,6 @@ func Register(ctx context.Context) error {
 		return importer.New(w.Cfg, w.HC, w.Importer, w.Qbt, w.Log), nil
 	})
 
-	di.RegisterLazySingletonWith(ctx, func(cfg *config.Config) (*calibredb.Client, error) {
-		return calibredb.NewClient(cfg.CalibredbBin, &calibredb.GlobalFlags{
-			LibraryPath: cfg.CalibreLibrary,
-		}), nil
-	})
 	di.RegisterLazySingletonWith(ctx, func(cfg *config.Config) (*hardcover.Client, error) {
 		return hardcover.New(cfg.HardcoverURL, cfg.HardcoverToken), nil
 	})

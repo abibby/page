@@ -7,10 +7,10 @@ import (
 	"github.com/abibby/fileserver"
 	"github.com/abibby/page/app/handlers"
 	"github.com/abibby/page/ui"
-	"github.com/abibby/salusa/auth"
-	"github.com/abibby/salusa/clog"
-	"github.com/abibby/salusa/request"
-	"github.com/abibby/salusa/router"
+	"gosalusa.com/auth"
+	"gosalusa.com/clog"
+	"gosalusa.com/request"
+	"gosalusa.com/router"
 )
 
 func InitRoutes(r *router.Router) {
@@ -32,7 +32,7 @@ func InitRoutes(r *router.Router) {
 
 		r.Get("/hardcover/search", handlers.HardcoverSearch).Name("hardcover.search")
 
-		r.Handle("/d", http.StripPrefix("/api/d", handlers.CalibreData)).Name("data")
+		r.Handle("/d", http.StripPrefix("/api/d", handlers.LibraryData)).Name("data")
 	})
 	r.Handle("/", fileserver.WithFallback(ui.Content, "dist", "index.html", nil))
 }
