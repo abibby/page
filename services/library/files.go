@@ -19,6 +19,8 @@ import (
 	"github.com/abibby/page/services/hardcover"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"gosalusa.com/database/builder"
+	"gosalusa.com/database/model"
 )
 
 func component(name string) string {
@@ -43,7 +45,7 @@ var authorIDSuffix = regexp.MustCompile(` \([0-9]+\)$`)
 
 func (s *Store) authorDirectory(ctx context.Context, tx *sqlx.Tx, author string) (string, error) {
 	var directory string
-	err := tx.GetContext(ctx, &directory, "SELECT path FROM library_authors WHERE name = ?", author)
+	err := models.LibraryAuthorQuery(ctx).Select("path").Where("name", "=", author).Load(tx, &directory)
 	if err == nil {
 		return directory, nil
 	}
@@ -74,7 +76,7 @@ func (s *Store) authorDirectory(ctx context.Context, tx *sqlx.Tx, author string)
 	if len(matches) == 1 {
 		directory = matches[0]
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO library_authors (name, path) VALUES (?, ?)", author, directory)
+	err = model.SaveContext(ctx, tx, &models.LibraryAuthor{Name: author, Path: directory})
 	return directory, err
 }
 
@@ -134,7 +136,7 @@ func (s *Store) AddBook(ctx context.Context, file string, audiobook bool, meta *
 				b.Pubdate = time.Date(meta.ReleaseYear, 1, 1, 0, 0, 0, 0, time.UTC)
 			}
 			b.Directory = b.UUID // Temporary unique path, updated before the transaction commits.
-			if err := insertBook(ctx, tx, b); err != nil {
+			if err := model.SaveContext(ctx, tx, b); err != nil {
 				return err
 			}
 			b.Directory = filepath.Join(directory, fmt.Sprintf("%s (%d)", component(b.Title), b.ID))
@@ -156,7 +158,9 @@ func (s *Store) AddBook(ctx context.Context, file string, audiobook bool, meta *
 					b.Cover = filepath.Join(b.Directory, "cover.jpg")
 				}
 			}
-			if _, err := tx.ExecContext(ctx, "UPDATE library_books SET path = ?, cover = ? WHERE id = ?", b.Directory, b.Cover, b.ID); err != nil {
+			if err := models.BookQuery(ctx).Where("id", "=", b.ID).Update(tx, builder.Updates{
+				"path": b.Directory, "cover": b.Cover,
+			}); err != nil {
 				return err
 			}
 		}
@@ -190,7 +194,7 @@ func (s *Store) AddFormat(ctx context.Context, id int, file string) error {
 	var created string
 	err := s.update(ctx, func(tx *sqlx.Tx) error {
 		b := &models.Book{}
-		if err := tx.GetContext(ctx, b, "SELECT * FROM library_books WHERE id = ?", id); err != nil {
+		if err := models.BookQuery(ctx).Where("id", "=", id).Load(tx, b); err != nil {
 			return err
 		}
 		var err error
@@ -260,7 +264,9 @@ func (s *Store) addFile(ctx context.Context, tx *sqlx.Tx, b *models.Book, file s
 		b.Size += int(info.Size())
 	}
 	b.LastModified = time.Now().UTC()
-	_, err = tx.ExecContext(ctx, "UPDATE library_books SET formats = ?, size = ?, last_modified = ? WHERE id = ?", b.Formats, b.Size, b.LastModified, b.ID)
+	err = models.BookQuery(ctx).Where("id", "=", b.ID).Update(tx, builder.Updates{
+		"formats": b.Formats, "size": b.Size, "last_modified": b.LastModified,
+	})
 	return created, err
 }
 

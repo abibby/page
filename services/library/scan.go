@@ -16,6 +16,7 @@ import (
 	"github.com/abibby/page/services/opf"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"gosalusa.com/database/model"
 )
 
 // Scan indexes missing author/book directories in place. Each directory is one
@@ -59,8 +60,8 @@ func (s *Store) scanBook(ctx context.Context, directory string) error {
 	// Keep the existence check and insert in the same locked transaction so an
 	// overlapping scan or import cannot register a partially written book.
 	return s.update(ctx, func(tx *sqlx.Tx) error {
-		var count int
-		if err := tx.GetContext(ctx, &count, "SELECT count(*) FROM library_books WHERE path = ?", directory); err != nil {
+		count, err := models.BookQuery(ctx).Where("path", "=", directory).Count(tx)
+		if err != nil {
 			return err
 		}
 		if count != 0 {
@@ -116,12 +117,10 @@ func (s *Store) scanBook(ctx context.Context, directory string) error {
 		if s.dryRun {
 			return nil
 		}
-		if err := insertBook(ctx, tx, b); err != nil {
+		if err := model.SaveContext(ctx, tx, b); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO library_authors (name, path) VALUES (?, ?) ON CONFLICT(name) DO NOTHING`,
-			strings.Split(b.Authors, " & ")[0], filepath.Dir(directory))
-		return err
+		return rememberAuthor(ctx, tx, strings.Split(b.Authors, " & ")[0], filepath.Dir(directory))
 	})
 }
 

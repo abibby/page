@@ -11,6 +11,7 @@ import (
 	"github.com/abibby/page/config"
 	"github.com/abibby/page/services/hardcover"
 	"github.com/stretchr/testify/require"
+	"gosalusa.com/database/builder"
 )
 
 func TestScanPreservesPathsAndImportsLocalMetadata(t *testing.T) {
@@ -116,6 +117,12 @@ func TestScanSkipsIndexedBooksAndUnrelatedFiles(t *testing.T) {
 	books, err = store.List(ctx, nil)
 	require.NoError(t, err)
 	require.Len(t, books, 2)
+	// The second folder for the same author must not replace the first mapping.
+	id, err = store.AddEmptyBook(ctx, &hardcover.Book{Title: "Next", Authors: []string{"Author"}})
+	require.NoError(t, err)
+	next, err := store.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(root, "Author"), filepath.Dir(next.Directory))
 }
 
 func TestScanContinuesAfterFailureAndRetries(t *testing.T) {
@@ -148,8 +155,8 @@ func TestScanDryRunCancellationAndMissingRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.Scan(ctx))
 	for _, table := range []string{"library_books", "library_authors"} {
-		var count int
-		require.NoError(t, db.Get(&count, "SELECT count(*) FROM "+table))
+		count, err := builder.NewBuilder().WithContext(ctx).From(table).Count(db)
+		require.NoError(t, err)
 		require.Zero(t, count)
 	}
 	ctx, cancel := context.WithCancel(ctx)

@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,6 +14,9 @@ import (
 	"github.com/abibby/page/services/hardcover"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
+	"gosalusa.com/database/builder"
+	"gosalusa.com/database/dialects"
+	"gosalusa.com/database/schema"
 )
 
 func newDatabase(t *testing.T) *sqlx.DB {
@@ -164,6 +168,15 @@ func TestFailedImportRollsBackAndDryRunDoesNotWrite(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestMissingBookReturnsNoRows(t *testing.T) {
+	ctx := context.Background()
+	store, err := New(ctx, &config.Config{LibraryPath: t.TempDir()}, newDatabase(t))
+	require.NoError(t, err)
+	_, err = store.Get(ctx, 999)
+	require.ErrorIs(t, err, sql.ErrNoRows)
+	require.ErrorIs(t, store.AddFormat(ctx, 999, "missing.epub"), sql.ErrNoRows)
+}
+
 func TestConcurrentImportsDoNotDuplicate(t *testing.T) {
 	ctx := context.Background()
 	store, err := New(ctx, &config.Config{LibraryPath: t.TempDir()}, newDatabase(t))
@@ -191,33 +204,85 @@ func legacyFixture(t *testing.T, root string) string {
 	source := filepath.Join(root, "metadata.db")
 	db, err := sqlx.Open("sqlite", source)
 	require.NoError(t, err)
-	_, err = db.Exec(`
- CREATE TABLE books (id INTEGER PRIMARY KEY, title TEXT, author_sort TEXT, path TEXT, uuid TEXT, timestamp TIMESTAMP, pubdate TIMESTAMP, last_modified TIMESTAMP, series_index REAL);
- CREATE TABLE authors (id INTEGER PRIMARY KEY, name TEXT);
- CREATE TABLE books_authors_link (id INTEGER PRIMARY KEY, book INTEGER, author INTEGER);
- CREATE TABLE identifiers (book INTEGER, type TEXT, val TEXT);
- CREATE TABLE comments (book INTEGER, text TEXT);
- CREATE TABLE series (id INTEGER PRIMARY KEY, name TEXT);
- CREATE TABLE books_series_link (book INTEGER, series INTEGER);
- CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT);
- CREATE TABLE books_tags_link (id INTEGER PRIMARY KEY, book INTEGER, tag INTEGER);
- CREATE TABLE languages (id INTEGER PRIMARY KEY, lang_code TEXT);
- CREATE TABLE books_languages_link (book INTEGER, lang_code INTEGER, item_order INTEGER);
- CREATE TABLE data (id INTEGER PRIMARY KEY, book INTEGER, name TEXT, format TEXT, uncompressed_size INTEGER);
- INSERT INTO books VALUES (42, 'Old Book', 'Author, Old', 'Old Author (9)/Old Book (42)', 'original-uuid', '2020-01-02 03:04:05+00:00', '2019-01-01 00:00:00+00:00', '2021-01-02 03:04:05+00:00', 2.5);
- INSERT INTO authors VALUES (9, 'Old Author');
- INSERT INTO books_authors_link VALUES (1, 42, 9);
- INSERT INTO identifiers VALUES (42, 'hardcover-id', '12'), (42, 'isbn', '9781234567890');
- INSERT INTO comments VALUES (42, '<p>Existing description</p>');
- INSERT INTO series VALUES (1, 'Existing series');
- INSERT INTO books_series_link VALUES (42, 1);
- INSERT INTO tags VALUES (1, 'Fiction');
- INSERT INTO books_tags_link VALUES (1, 42, 1);
- INSERT INTO languages VALUES (1, 'eng');
- INSERT INTO books_languages_link VALUES (42, 1, 0);
- INSERT INTO data VALUES (1, 42, 'Original - Old Author', 'EPUB', 8);
- `)
-	require.NoError(t, err)
+	for _, table := range []*schema.CreateTableBuilder{
+		schema.Create("books", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			for _, column := range []string{"title", "author_sort", "path", "uuid"} {
+				table.Text(column).Nullable()
+			}
+			for _, column := range []string{"timestamp", "pubdate", "last_modified"} {
+				table.DateTime(column).Nullable()
+			}
+			table.Float64("series_index").Nullable()
+		}),
+		schema.Create("authors", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			table.Text("name").Nullable()
+		}),
+		schema.Create("books_authors_link", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			table.Int("book").Nullable()
+			table.Int("author").Nullable()
+		}),
+		schema.Create("identifiers", func(table *schema.Blueprint) {
+			table.Int("book").Nullable()
+			table.Text("type").Nullable()
+			table.Text("val").Nullable()
+		}),
+		schema.Create("comments", func(table *schema.Blueprint) {
+			table.Int("book").Nullable()
+			table.Text("text").Nullable()
+		}),
+		schema.Create("series", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			table.Text("name").Nullable()
+		}),
+		schema.Create("books_series_link", func(table *schema.Blueprint) {
+			table.Int("book").Nullable()
+			table.Int("series").Nullable()
+		}),
+		schema.Create("tags", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			table.Text("name").Nullable()
+		}),
+		schema.Create("books_tags_link", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			table.Int("book").Nullable()
+			table.Int("tag").Nullable()
+		}),
+		schema.Create("languages", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			table.Text("lang_code").Nullable()
+		}),
+		schema.Create("books_languages_link", func(table *schema.Blueprint) {
+			table.Int("book").Nullable()
+			table.Int("lang_code").Nullable()
+			table.Int("item_order").Nullable()
+		}),
+		schema.Create("data", func(table *schema.Blueprint) {
+			table.Int("id").Primary()
+			table.Int("book").Nullable()
+			table.Text("name").Nullable()
+			table.Text("format").Nullable()
+			table.Int("uncompressed_size").Nullable()
+		}),
+	} {
+		require.NoError(t, table.Run(context.Background(), db))
+	}
+	insertLegacyRows(t, db, "books", legacyBookRow(42, "Old Author (9)/Old Book (42)"))
+	insertLegacyRows(t, db, "authors", map[string]any{"id": 9, "name": "Old Author"})
+	insertLegacyRows(t, db, "books_authors_link", map[string]any{"id": 1, "book": 42, "author": 9})
+	insertLegacyRows(t, db, "identifiers",
+		map[string]any{"book": 42, "type": "hardcover-id", "val": "12"},
+		map[string]any{"book": 42, "type": "isbn", "val": "9781234567890"})
+	insertLegacyRows(t, db, "comments", map[string]any{"book": 42, "text": "<p>Existing description</p>"})
+	insertLegacyRows(t, db, "series", map[string]any{"id": 1, "name": "Existing series"})
+	insertLegacyRows(t, db, "books_series_link", map[string]any{"book": 42, "series": 1})
+	insertLegacyRows(t, db, "tags", map[string]any{"id": 1, "name": "Fiction"})
+	insertLegacyRows(t, db, "books_tags_link", map[string]any{"id": 1, "book": 42, "tag": 1})
+	insertLegacyRows(t, db, "languages", map[string]any{"id": 1, "lang_code": "eng"})
+	insertLegacyRows(t, db, "books_languages_link", map[string]any{"book": 42, "lang_code": 1, "item_order": 0})
+	insertLegacyRows(t, db, "data", map[string]any{"id": 1, "book": 42, "name": "Original - Old Author", "format": "EPUB", "uncompressed_size": 8})
 	require.NoError(t, db.Close())
 	directory := filepath.Join(root, "Old Author (9)", "Old Book (42)")
 	writeFile(t, filepath.Join(directory, "Original - Old Author.epub"), "original")
@@ -225,6 +290,26 @@ func legacyFixture(t *testing.T, root string) string {
 	writeFile(t, filepath.Join(directory, "01.mp3"), "audio")
 	writeFile(t, filepath.Join(directory, "metadata.opf"), "original metadata")
 	return source
+}
+
+// Calibre tables have no Page models, so fixture inserts use Salusa's dialect
+// query representation directly.
+func insertLegacyRows(t *testing.T, db *sqlx.DB, table string, rows ...map[string]any) {
+	t.Helper()
+	dialect, err := dialects.New(db.DriverName())
+	require.NoError(t, err)
+	query, err := dialect.EncodeInsertQuery(&dialects.InsertQuery{Table: table, Values: rows})
+	require.NoError(t, err)
+	_, err = db.ExecContext(context.Background(), query.SQL, query.Bindings...)
+	require.NoError(t, err)
+}
+
+func legacyBookRow(id int, path string) map[string]any {
+	return map[string]any{
+		"id": id, "title": "Old Book", "author_sort": "Author, Old", "path": path,
+		"uuid": "original-uuid", "timestamp": "2020-01-02 03:04:05+00:00",
+		"pubdate": "2019-01-01 00:00:00+00:00", "last_modified": "2021-01-02 03:04:05+00:00", "series_index": 2.5,
+	}
 }
 
 func TestMigrateCalibrePreservesIDsPathsAndMetadata(t *testing.T) {
@@ -282,15 +367,53 @@ func TestLegacyImportFailureIsAtomic(t *testing.T) {
 	source := legacyFixture(t, root)
 	old, err := sqlx.Open("sqlite", source)
 	require.NoError(t, err)
-	_, err = old.Exec(`INSERT INTO books SELECT 43, title, author_sort, '../outside', uuid, timestamp, pubdate, last_modified, series_index FROM books WHERE id = 42`)
-	require.NoError(t, err)
+	insertLegacyRows(t, old, "books", legacyBookRow(43, "../outside"))
 	require.NoError(t, old.Close())
 	db := newDatabase(t)
 	_, err = New(ctx, &config.Config{LibraryPath: root}, db)
 	require.Error(t, err)
 	for _, table := range []string{"library_books", "library_authors", "library_imports"} {
-		var count int
-		require.NoError(t, db.Get(&count, "SELECT count(*) FROM "+table))
+		count, err := builder.NewBuilder().WithContext(ctx).From(table).Count(db)
+		require.NoError(t, err)
 		require.Zero(t, count, table)
+	}
+}
+
+func TestMigrateCalibreOptionalMetadata(t *testing.T) {
+	for _, missing := range []bool{false, true} {
+		name := "null values"
+		if missing {
+			name = "missing rows"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			root := t.TempDir()
+			source := legacyFixture(t, root)
+			old, err := sqlx.Open("sqlite", source)
+			require.NoError(t, err)
+			require.NoError(t, builder.NewBuilder().WithContext(ctx).From("books").
+				Where("id", "=", 42).Update(old, builder.Updates{
+				"author_sort": nil, "uuid": nil, "timestamp": nil, "pubdate": nil,
+			}))
+			for table, column := range map[string]string{"comments": "text", "series": "name"} {
+				query := builder.NewBuilder().WithContext(ctx).From(table)
+				if missing {
+					require.NoError(t, query.Delete(old))
+				} else {
+					require.NoError(t, query.Update(old, builder.Updates{column: nil}))
+				}
+			}
+			require.NoError(t, old.Close())
+			store, err := New(ctx, &config.Config{LibraryPath: root}, newDatabase(t))
+			require.NoError(t, err)
+			book, err := store.Get(ctx, 42)
+			require.NoError(t, err)
+			require.Empty(t, book.Description)
+			require.Empty(t, book.Series)
+			require.Empty(t, book.AuthorSort)
+			require.Empty(t, book.UUID)
+			require.Empty(t, book.Timestamp)
+			require.True(t, book.Pubdate.IsZero())
+		})
 	}
 }
